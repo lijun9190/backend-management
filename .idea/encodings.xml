@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="Encoding" defaultCharsetForPropertiesFiles="UTF-8">
+    <file url="file://$PROJECT_DIR$/backend/backend-auth/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/backend/backend-auth/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/backend/backend-common/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/backend/backend-common/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/backend/backend-gateway/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/backend/backend-gateway/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/backend/backend-system/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/backend/backend-system/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/backend/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/backend/src/main/resources" charset="UTF-8" />
+    <file url="PROJECT" charset="UTF-8" />
+  </component>
+</project>

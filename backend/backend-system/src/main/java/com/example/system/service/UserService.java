@@ -1,0 +1,31 @@
+package com.example.system.service;
+
+import com.example.system.dto.user.UserQueryDTO;
+import com.example.system.dto.user.UserSaveDTO;
+import com.example.system.vo.user.UserDetailVO;
+import com.example.system.vo.user.UserPageVO;
+import com.example.common.model.result.PageResult;
+
+import java.util.List;
+
+/**
+ * 用户管理服务。
+ */
+public interface UserService {
+
+    PageResult<UserPageVO> pageQuery(UserQueryDTO dto);
+
+    UserDetailVO detail(Long id);
+
+    void saveUser(UserSaveDTO dto);
+
+    void updateUser(Long id, UserSaveDTO dto);
+
+    void changeStatus(Long id, Integer status);
+
+    void resetPassword(Long id, String password);
+
+    void assignRoles(Long id, List<Long> roleIds);
+
+    void removeUser(Long id);
+}

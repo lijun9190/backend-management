@@ -1,0 +1,5 @@
+D:\Dev\AiCode\Cursor_code\backendManager\backend\backend-gateway\src\main\java\com\example\gateway\config\CorsConfig.java
+D:\Dev\AiCode\Cursor_code\backendManager\backend\backend-gateway\src\main\java\com\example\gateway\config\SecurityConfig.java
+D:\Dev\AiCode\Cursor_code\backendManager\backend\backend-gateway\src\main\java\com\example\gateway\config\IgnoreWhiteProperties.java
+D:\Dev\AiCode\Cursor_code\backendManager\backend\backend-gateway\src\main\java\com\example\gateway\BackendGatewayApplication.java
+D:\Dev\AiCode\Cursor_code\backendManager\backend\backend-gateway\src\main\java\com\example\gateway\filter\AuthTokenGlobalFilter.java

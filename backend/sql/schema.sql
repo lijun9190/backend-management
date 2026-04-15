@@ -1,0 +1,134 @@
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
+
+DROP TABLE IF EXISTS `sys_operation_log`;
+DROP TABLE IF EXISTS `sys_login_log`;
+DROP TABLE IF EXISTS `sys_role_menu`;
+DROP TABLE IF EXISTS `sys_user_role`;
+DROP TABLE IF EXISTS `sys_menu`;
+DROP TABLE IF EXISTS `sys_role`;
+DROP TABLE IF EXISTS `sys_user`;
+DROP TABLE IF EXISTS `sys_dept`;
+
+CREATE TABLE `sys_dept` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `parent_id` BIGINT NOT NULL DEFAULT 0 COMMENT '父部门ID',
+  `dept_name` VARCHAR(100) NOT NULL COMMENT '部门名称',
+  `leader` VARCHAR(50) DEFAULT NULL COMMENT '负责人',
+  `phone` VARCHAR(20) DEFAULT NULL COMMENT '联系电话',
+  `sort` INT NOT NULL DEFAULT 0 COMMENT '排序值',
+  `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态 1启用 0禁用',
+  `create_by` VARCHAR(64) DEFAULT NULL COMMENT '创建人',
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_by` VARCHAR(64) DEFAULT NULL COMMENT '更新人',
+  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除 0否 1是',
+  `remark` VARCHAR(255) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='部门表';
+
+CREATE TABLE `sys_user` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `dept_id` BIGINT DEFAULT NULL COMMENT '部门ID',
+  `username` VARCHAR(64) NOT NULL COMMENT '用户名',
+  `password` VARCHAR(255) NOT NULL COMMENT '密码',
+  `nickname` VARCHAR(64) NOT NULL COMMENT '昵称',
+  `real_name` VARCHAR(64) DEFAULT NULL COMMENT '真实姓名',
+  `phone` VARCHAR(20) DEFAULT NULL COMMENT '手机号',
+  `email` VARCHAR(100) DEFAULT NULL COMMENT '邮箱',
+  `gender` TINYINT DEFAULT 1 COMMENT '性别 1男 2女',
+  `avatar` VARCHAR(255) DEFAULT NULL COMMENT '头像地址',
+  `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态 1启用 0禁用',
+  `create_by` VARCHAR(64) DEFAULT NULL COMMENT '创建人',
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_by` VARCHAR(64) DEFAULT NULL COMMENT '更新人',
+  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除 0否 1是',
+  `remark` VARCHAR(255) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_sys_user_username` (`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='用户表';
+
+CREATE TABLE `sys_role` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `role_name` VARCHAR(64) NOT NULL COMMENT '角色名称',
+  `role_code` VARCHAR(64) NOT NULL COMMENT '角色编码',
+  `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态 1启用 0禁用',
+  `create_by` VARCHAR(64) DEFAULT NULL COMMENT '创建人',
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_by` VARCHAR(64) DEFAULT NULL COMMENT '更新人',
+  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除 0否 1是',
+  `remark` VARCHAR(255) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_sys_role_code` (`role_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='角色表';
+
+CREATE TABLE `sys_menu` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `parent_id` BIGINT NOT NULL DEFAULT 0 COMMENT '父菜单ID',
+  `menu_name` VARCHAR(100) NOT NULL COMMENT '菜单名称',
+  `menu_type` VARCHAR(20) NOT NULL COMMENT '菜单类型 CATALOG/MENU/BUTTON',
+  `path` VARCHAR(120) DEFAULT NULL COMMENT '路由路径',
+  `component` VARCHAR(200) DEFAULT NULL COMMENT '组件路径',
+  `route_name` VARCHAR(100) DEFAULT NULL COMMENT '路由名称',
+  `icon` VARCHAR(100) DEFAULT NULL COMMENT '图标',
+  `sort` INT NOT NULL DEFAULT 0 COMMENT '排序值',
+  `permission_code` VARCHAR(120) DEFAULT NULL COMMENT '权限码',
+  `visible` TINYINT NOT NULL DEFAULT 1 COMMENT '是否显示 1显示 0隐藏',
+  `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态 1启用 0禁用',
+  `create_by` VARCHAR(64) DEFAULT NULL COMMENT '创建人',
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_by` VARCHAR(64) DEFAULT NULL COMMENT '更新人',
+  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除 0否 1是',
+  `remark` VARCHAR(255) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='菜单表';
+
+CREATE TABLE `sys_user_role` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `user_id` BIGINT NOT NULL COMMENT '用户ID',
+  `role_id` BIGINT NOT NULL COMMENT '角色ID',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_role` (`user_id`, `role_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='用户角色关联表';
+
+CREATE TABLE `sys_role_menu` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `role_id` BIGINT NOT NULL COMMENT '角色ID',
+  `menu_id` BIGINT NOT NULL COMMENT '菜单ID',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_role_menu` (`role_id`, `menu_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='角色菜单关联表';
+
+CREATE TABLE `sys_login_log` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `username` VARCHAR(64) DEFAULT NULL COMMENT '用户名',
+  `nickname` VARCHAR(64) DEFAULT NULL COMMENT '昵称',
+  `login_ip` VARCHAR(64) DEFAULT NULL COMMENT '登录IP',
+  `browser` VARCHAR(100) DEFAULT NULL COMMENT '浏览器',
+  `os` VARCHAR(100) DEFAULT NULL COMMENT '操作系统',
+  `login_status` TINYINT NOT NULL DEFAULT 1 COMMENT '登录状态 1成功 0失败',
+  `message` VARCHAR(255) DEFAULT NULL COMMENT '提示信息',
+  `login_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '登录时间',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='登录日志表';
+
+CREATE TABLE `sys_operation_log` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `module_name` VARCHAR(100) NOT NULL COMMENT '模块名称',
+  `operation_type` VARCHAR(50) NOT NULL COMMENT '操作类型',
+  `request_method` VARCHAR(20) DEFAULT NULL COMMENT '请求方法',
+  `request_uri` VARCHAR(255) DEFAULT NULL COMMENT '请求地址',
+  `operator_name` VARCHAR(64) DEFAULT NULL COMMENT '操作人昵称',
+  `operator_username` VARCHAR(64) DEFAULT NULL COMMENT '操作人账号',
+  `request_params` TEXT COMMENT '请求参数',
+  `operation_status` TINYINT NOT NULL DEFAULT 1 COMMENT '操作状态 1成功 0失败',
+  `cost_time` BIGINT DEFAULT NULL COMMENT '耗时毫秒',
+  `error_message` VARCHAR(255) DEFAULT NULL COMMENT '异常信息',
+  `operation_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '操作时间',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='操作日志表';
+
+SET FOREIGN_KEY_CHECKS = 1;
