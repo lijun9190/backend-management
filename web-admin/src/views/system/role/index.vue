@@ -118,7 +118,6 @@ export default {
   },
   created() {
     this.fetchList()
-    this.loadMenuTree()
   },
   methods: {
     hasPermission(code) {
@@ -135,8 +134,12 @@ export default {
       }
     },
     async loadMenuTree() {
+      if (this.menuTree && this.menuTree.length > 0) {
+        return true
+      }
       const res = await getMenuTree()
       this.menuTree = res.data || []
+      return true
     },
     resetQuery() {
       this.query = { current: 1, size: 10, roleName: '', status: undefined }
@@ -169,12 +172,16 @@ export default {
       this.$message.success('状态更新成功')
     },
     async openAssign(row) {
-      this.currentRoleId = row.id
-      this.assignDialogVisible = true
-      this.$nextTick(async () => {
+      try {
+        await this.loadMenuTree()
+        this.currentRoleId = row.id
+        this.assignDialogVisible = true
+        await this.$nextTick()
         const res = await getRoleMenuIds(row.id)
         this.$refs.menuTreeRef.setCheckedKeys(res.data || [])
-      })
+      } catch (error) {
+        this.assignDialogVisible = false
+      }
     },
     async submitAssign() {
       const checkedKeys = this.$refs.menuTreeRef.getCheckedKeys()
