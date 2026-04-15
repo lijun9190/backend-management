@@ -33,22 +33,38 @@ public class SecurityConfig {
         this.objectMapper = objectMapper;
     }
 
+/**
+ * 配置Spring Security的安全过滤器链
+ * @param http HttpSecurity对象，用于配置安全规则
+ * @return 配置好的SecurityFilterChain实例
+ * @throws Exception 可能抛出的异常
+ */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    // 禁用CSRF保护，因为是无状态的RESTful API
         http.csrf().disable()
+            // 配置会话管理为无状态模式，不创建会话
                 .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 .and()
+            // 配置请求授权规则
                 .authorizeRequests()
+            // 允许所有人访问登录接口和错误接口
                 .antMatchers("/api/auth/login", "/error").permitAll()
+            // 其他所有请求都需要认证
                 .anyRequest().authenticated()
                 .and()
+            // 配置异常处理
                 .exceptionHandling()
+            // 设置认证入口点，处理未认证的请求
                 .authenticationEntryPoint((request, response, ex) -> writeJson(response,
                         CommonConstants.UNAUTHORIZED_CODE, "未登录或登录状态已过期"))
+            // 设置访问拒绝处理器，处理权限不足的请求
                 .accessDeniedHandler((request, response, ex) -> writeJson(response,
                         CommonConstants.FORBIDDEN_CODE, "没有访问该资源的权限"))
                 .and()
+            // 添加JWT认证过滤器，在用户名密码认证过滤器之前执行
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+    // 构建并返回SecurityFilterChain实例
         return http.build();
     }
 

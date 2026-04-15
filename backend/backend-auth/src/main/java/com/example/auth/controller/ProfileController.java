@@ -24,8 +24,16 @@ public class ProfileController {
         this.authService = authService;
     }
 
+/**
+ * 获取当前用户资料的接口方法
+ * 使用GET方法请求/profile路径
+ *
+ * @return ApiResult<UserProfileVO> 返回一个包含用户资料信息的API结果对象
+ */
     @GetMapping("/profile")
     public ApiResult<UserProfileVO> profile() {
+    // 调用authService的getCurrentUserProfile方法获取当前用户资料
+    // 并使用ApiResult.success方法封装成统一的API返回格式
         return ApiResult.success(authService.getCurrentUserProfile());
     }
 

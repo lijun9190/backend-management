@@ -41,10 +41,17 @@ public class RoleController {
         return ApiResult.success(roleService.options());
     }
 
-    @PreAuthorize("@perm.hasPermission('system:role:list')")
-    @GetMapping("/{id}/menu-ids")
-    public ApiResult<List<Long>> menuIds(@PathVariable Long id) {
-        return ApiResult.success(roleService.getMenuIds(id));
+/**
+ * 根据角色ID获取菜单ID列表
+ * 需要system:role:list权限才能访问此接口
+ *
+ * @param id 角色ID
+ * @return 返回该角色关联的菜单ID列表
+ */
+    @PreAuthorize("@perm.hasPermission('system:role:list')") // 权限控制，需要拥有system:role:list权限
+    @GetMapping("/{id}/menu-ids") // HTTP GET请求，路径为/{id}/menu-ids
+    public ApiResult<List<Long>> menuIds(@PathVariable Long id) { // 方法：获取角色菜单ID列表，参数为路径中的角色ID
+        return ApiResult.success(roleService.getMenuIds(id)); // 调用服务层方法获取菜单ID列表并返回成功响应
     }
 
     @OperLog(module = "角色管理", type = "新增")
