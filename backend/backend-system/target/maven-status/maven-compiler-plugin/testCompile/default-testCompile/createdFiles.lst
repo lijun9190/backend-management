@@ -1,4 +1,3 @@
 com\example\system\ApplicationYamlConfigTest.class
-com\example\system\service\UserServiceDeleteTest.class
-com\example\system\config\MybatisPlusIdTypeConfigTest.class
 com\example\system\mapper\SysUserMapperIdGenerationTest.class
+com\example\system\service\UserServiceDeleteTest.class

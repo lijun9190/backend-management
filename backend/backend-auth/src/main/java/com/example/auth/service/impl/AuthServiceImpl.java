@@ -1,6 +1,7 @@
 package com.example.auth.service.impl;
 
 import com.example.auth.dto.LoginDTO;
+import com.example.auth.dto.RefreshTokenDTO;
 import com.example.auth.dto.UpdatePasswordDTO;
 import com.example.auth.mapper.AuthMenuMapper;
 import com.example.auth.mapper.AuthRoleMapper;
@@ -12,16 +13,15 @@ import com.example.auth.vo.LoginVO;
 import com.example.auth.vo.UserMenuVO;
 import com.example.auth.vo.UserProfileVO;
 import com.example.common.constant.CommonConstants;
-import com.example.common.constant.RedisKeyConstants;
 import com.example.common.context.LoginUserContext;
 import com.example.common.entity.SysDept;
 import com.example.common.entity.SysLoginLog;
 import com.example.common.entity.SysMenu;
 import com.example.common.entity.SysUser;
 import com.example.common.exception.BusinessException;
+import com.example.common.model.security.AuthTokens;
 import com.example.common.model.security.LoginUser;
-import com.example.common.redis.RedisOperator;
-import com.example.common.security.JwtTokenProvider;
+import com.example.common.security.LoginSessionManager;
 import com.example.common.util.IpUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -33,116 +33,116 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
- * 认证服务实现。
+ * 认证服务实现类
+ * 提供用户登录、登出、刷新令牌、获取用户信息、更新密码等功能
  */
 @Service
 public class AuthServiceImpl implements AuthService {
 
+    // 依赖注入的Mapper和Service
     private final SysUserMapper sysUserMapper;
     private final SysDeptMapper sysDeptMapper;
     private final SysLoginLogMapper sysLoginLogMapper;
     private final AuthRoleMapper authRoleMapper;
     private final AuthMenuMapper authMenuMapper;
-    private final JwtTokenProvider jwtTokenProvider;
-    private final RedisOperator redisOperator;
+    private final LoginSessionManager loginSessionManager;
     private final PasswordEncoder passwordEncoder;
 
+    /**
+     * 构造函数，注入所有依赖
+     */
     public AuthServiceImpl(SysUserMapper sysUserMapper,
                            SysDeptMapper sysDeptMapper,
                            SysLoginLogMapper sysLoginLogMapper,
                            AuthRoleMapper authRoleMapper,
                            AuthMenuMapper authMenuMapper,
-                           JwtTokenProvider jwtTokenProvider,
-                           RedisOperator redisOperator,
+                           LoginSessionManager loginSessionManager,
                            PasswordEncoder passwordEncoder) {
         this.sysUserMapper = sysUserMapper;
         this.sysDeptMapper = sysDeptMapper;
         this.sysLoginLogMapper = sysLoginLogMapper;
         this.authRoleMapper = authRoleMapper;
         this.authMenuMapper = authMenuMapper;
-        this.jwtTokenProvider = jwtTokenProvider;
-        this.redisOperator = redisOperator;
+        this.loginSessionManager = loginSessionManager;
         this.passwordEncoder = passwordEncoder;
     }
 
-/**
- * 登录方法，处理用户登录逻辑
- * @param dto 登录数据传输对象，包含用户名和密码
- * @param request HTTP请求对象，用于获取客户端信息
- * @return LoginVO 包含token和过期时间的登录结果对象
- * @throws BusinessException 当登录失败时抛出业务异常
- */
+    /**
+     * 用户登录方法
+     * @param dto 登录数据传输对象
+     * @param request HTTP请求对象
+     * @return 登录结果视图对象
+     */
     @Override
-    @Transactional(rollbackFor = Exception.class) // 事务注解，确保方法内所有操作要么全部成功，要么全部回滚
+    @Transactional(rollbackFor = Exception.class)
     public LoginVO login(LoginDTO dto, HttpServletRequest request) {
-    // 根据用户名查询用户
+        // 根据用户名查询用户
         SysUser user = sysUserMapper.selectByUsername(dto.getUsername());
-    // 判断用户是否存在或已被逻辑删除
+        // 判断用户是否存在或已被删除
         if (user == null || Integer.valueOf(CommonConstants.DELETED_YES).equals(user.getDeleted())) {
-        // 记录登录日志（用户名不存在）
             recordLoginLog(dto.getUsername(), null, request, 0, "用户名不存在");
-        // 抛出用户名或密码错误异常
             throw new BusinessException("用户名或密码错误");
         }
-    // 检查用户状态是否被禁用
-        if (user.getStatus() == null || user.getStatus() == CommonConstants.STATUS_DISABLED) {
-        // 记录登录日志（账号被禁用）
+        // 判断用户是否被禁用
+        if (user.getStatus() == null || user.getStatus().equals(CommonConstants.STATUS_DISABLED)) {
             recordLoginLog(dto.getUsername(), user.getNickname(), request, 0, "账号已被禁用");
-        // 抛出账号被禁用异常
             throw new BusinessException("账号已被禁用，请联系管理员");
         }
-    // 验证密码是否正确
+        // 验证密码
         if (!passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
-        // 记录登录日志（密码错误）
             recordLoginLog(dto.getUsername(), user.getNickname(), request, 0, "密码错误");
-        // 抛出用户名或密码错误异常
             throw new BusinessException("用户名或密码错误");
         }
 
-    // 构建登录用户对象
+        // 构建登录用户对象
         LoginUser loginUser;
         try {
             loginUser = buildLoginUser(user);
         } catch (BusinessException exception) {
-        // 记录登录日志（构建登录用户失败）
             recordLoginLog(dto.getUsername(), user.getNickname(), request, 0, exception.getMessage());
             throw exception;
         }
-    // 生成JWT token
-        String token = jwtTokenProvider.createToken(loginUser);
-    // 缓存登录token
-        cacheLoginToken(token, loginUser);
-    // 记录登录日志（登录成功）
+
+        // 创建会话并生成令牌
+        AuthTokens authTokens = loginSessionManager.createSession(loginUser);
+        // 记录登录日志
         recordLoginLog(dto.getUsername(), user.getNickname(), request, 1, "登录成功");
-    // 返回登录结果对象，包含token和过期时间
-        return new LoginVO(token, "Bearer", jwtTokenProvider.getExpireSeconds());
+        return toLoginVO(authTokens);
     }
 
+    /**
+     * 刷新访问令牌
+     * @param dto 刷新令牌数据传输对象
+     * @return 登录结果视图对象
+     */
+    @Override
+    public LoginVO refreshToken(RefreshTokenDTO dto) {
+        return toLoginVO(loginSessionManager.refreshSession(dto.getRefreshToken()));
+    }
+
+    /**
+     * 用户登出方法
+     * @param authorization 认证信息
+     */
     @Override
     public void logout(String authorization) {
         String token = resolveToken(authorization);
         if (StringUtils.hasText(token)) {
-            redisOperator.delete(RedisKeyConstants.loginTokenKey(token));
+            loginSessionManager.invalidateAccessToken(token);
         }
     }
 
-/**
- * 获取当前登录用户的个人信息
- * 该方法会从登录用户信息中提取基本数据，并从数据库中获取更多详细信息
- *
- * @return UserProfileVO 包含用户完整信息的视图对象
- */
+    /**
+     * 获取当前用户个人信息
+     * @return 用户个人信息视图对象
+     */
     @Override
     public UserProfileVO getCurrentUserProfile() {
-    // 获取当前登录用户信息
         LoginUser loginUser = currentLoginUser();
-    // 创建用户信息视图对象
         UserProfileVO profileVO = new UserProfileVO();
-    // 设置从登录用户信息中获取的基本字段
         profileVO.setUserId(loginUser.getUserId());
         profileVO.setUsername(loginUser.getUsername());
         profileVO.setNickname(loginUser.getNickname());
@@ -150,37 +150,42 @@ public class AuthServiceImpl implements AuthService {
         profileVO.setRoles(loginUser.getRoles());
         profileVO.setPermissions(loginUser.getPermissions());
 
-    // 根据用户ID查询系统用户详细信息
+        // 获取用户详细信息
         SysUser user = sysUserMapper.selectById(loginUser.getUserId());
-    // 如果用户信息存在，则设置更多详细信息
         if (user != null) {
             profileVO.setRealName(user.getRealName());
             profileVO.setPhone(user.getPhone());
             profileVO.setEmail(user.getEmail());
             profileVO.setAvatar(user.getAvatar());
         }
-    // 加载用户的菜单权限
+        // 加载用户菜单并构建菜单树
         List<SysMenu> menus = loadMenus(loginUser.getUserId(), loginUser.isSuperAdmin());
-    // 构建菜单树并设置到用户信息中
         profileVO.setMenus(buildMenuTree(menus, 0L));
-    // 返回完整的用户信息视图对象
         return profileVO;
     }
 
+    /**
+     * 更新用户密码
+     * @param dto 更新密码数据传输对象
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updatePassword(UpdatePasswordDTO dto) {
+        // 验证两次输入的新密码是否一致
         if (!dto.getNewPassword().equals(dto.getConfirmPassword())) {
             throw new BusinessException("两次输入的新密码不一致");
         }
         LoginUser loginUser = currentLoginUser();
+        // 获取当前用户信息
         SysUser user = sysUserMapper.selectById(loginUser.getUserId());
         if (user == null) {
             throw new BusinessException("当前用户不存在");
         }
+        // 验证旧密码是否正确
         if (!passwordEncoder.matches(dto.getOldPassword(), user.getPassword())) {
             throw new BusinessException("旧密码输入错误");
         }
+        // 更新用户密码
         user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
         user.setUpdateBy(loginUser.getUsername());
         user.setUpdateTime(LocalDateTime.now());
@@ -188,7 +193,9 @@ public class AuthServiceImpl implements AuthService {
     }
 
     /**
-     * 组装当前登录用户信息。
+     * 构建登录用户对象
+     * @param user 系统用户实体
+     * @return 登录用户对象
      */
     private LoginUser buildLoginUser(SysUser user) {
         LoginUser loginUser = new LoginUser();
@@ -197,14 +204,17 @@ public class AuthServiceImpl implements AuthService {
         loginUser.setUsername(user.getUsername());
         loginUser.setNickname(user.getNickname());
         loginUser.setStatus(user.getStatus());
+        // 获取用户部门信息
         SysDept dept = user.getDeptId() == null ? null : sysDeptMapper.selectById(user.getDeptId());
         loginUser.setDeptName(dept == null ? null : dept.getDeptName());
-    // 获取用户角色代码
+
+        // 获取用户角色编码列表
         List<String> roleCodes = authRoleMapper.selectRoleCodesByUserId(user.getId());
         if (roleCodes == null || roleCodes.isEmpty()) {
             throw new BusinessException("当前账号未分配角色，请联系管理员");
         }
         loginUser.setRoles(roleCodes);
+        // 根据用户角色获取权限列表
         if (loginUser.isSuperAdmin()) {
             loginUser.setPermissions(authMenuMapper.selectAllMenus().stream()
                     .map(SysMenu::getPermissionCode)
@@ -217,25 +227,14 @@ public class AuthServiceImpl implements AuthService {
         return loginUser;
     }
 
-/**
- * 将登录令牌和用户信息缓存到Redis中
- * 该方法实现了双向缓存，即同时缓存token到用户信息和用户ID到token的映射关系
- *
- * @param token 登录令牌
- * @param loginUser 登录用户信息对象
- */
-    private void cacheLoginToken(String token, LoginUser loginUser) {
-    // 将token作为key，登录用户信息作为value存入Redis
-    // 设置过期时间为JWT令牌的有效期（以秒为单位）
-        redisOperator.set(RedisKeyConstants.loginTokenKey(token), loginUser,
-                jwtTokenProvider.getExpireSeconds(), TimeUnit.SECONDS);
-    // 将用户ID作为key，token作为value存入Redis
-    // 设置过期时间为JWT令牌的有效期（以秒为单位）
-    // 这样可以通过用户ID快速找到对应的token
-        redisOperator.set(RedisKeyConstants.loginUserKey(loginUser.getUserId()), token,
-                jwtTokenProvider.getExpireSeconds(), TimeUnit.SECONDS);
-    }
-
+    /**
+     * 记录用户登录日志
+     * @param username 用户名
+     * @param nickname 昵称
+     * @param request HTTP请求对象
+     * @param status 登录状态
+     * @param message 登录消息
+     */
     private void recordLoginLog(String username, String nickname, HttpServletRequest request, Integer status, String message) {
         SysLoginLog loginLog = new SysLoginLog();
         loginLog.setUsername(username);
@@ -249,6 +248,11 @@ public class AuthServiceImpl implements AuthService {
         sysLoginLogMapper.insert(loginLog);
     }
 
+    /**
+     * 解析浏览器信息
+     * @param request HTTP请求对象
+     * @return 浏览器名称
+     */
     private String parseBrowser(HttpServletRequest request) {
         String ua = request == null ? null : request.getHeader("User-Agent");
         if (!StringUtils.hasText(ua)) {
@@ -266,6 +270,11 @@ public class AuthServiceImpl implements AuthService {
         return "Browser";
     }
 
+    /**
+     * 解析操作系统信息
+     * @param request HTTP请求对象
+     * @return 操作系统名称
+     */
     private String parseOs(HttpServletRequest request) {
         String ua = request == null ? null : request.getHeader("User-Agent");
         if (!StringUtils.hasText(ua)) {
@@ -283,45 +292,37 @@ public class AuthServiceImpl implements AuthService {
         return "OS";
     }
 
-/**
- * 根据用户ID和是否超级管理员标志加载菜单列表
- * @param userId 用户ID
- * @param superAdmin 是否为超级管理员标志
- * @return 返回菜单列表，如果是超级管理员则返回所有菜单，否则返回该用户有权限的菜单
- */
+    /**
+     * 加载用户菜单
+     * @param userId 用户ID
+     * @param superAdmin 是否为超级管理员
+     * @return 菜单列表
+     */
     private List<SysMenu> loadMenus(Long userId, boolean superAdmin) {
         return superAdmin ? authMenuMapper.selectAllMenus() : authMenuMapper.selectMenusByUserId(userId);
-    // 使用三元运算符判断是否为超级管理员
-    // 如果是超级管理员，调用selectAllMenus()获取所有菜单
-    // 否则，调用selectMenusByUserId(userId)获取指定用户的菜单
     }
 
-/**
- * 构建菜单树形结构
- * @param menus 所有菜单列表
- * @param parentId 父菜单ID
- * @return 构建好的菜单树形结构列表
- */
+    /**
+     * 构建菜单树
+     * @param menus 菜单列表
+     * @param parentId 父菜单ID
+     * @return 菜单树结构
+     */
     private List<UserMenuVO> buildMenuTree(List<SysMenu> menus, Long parentId) {
-    // 创建树形结构列表
         List<UserMenuVO> tree = new ArrayList<>();
-    // 筛选出当前父级ID下的所有菜单，并按排序号和ID排序
+        // 筛选出当前父菜单下的所有子菜单
         List<SysMenu> current = menus.stream()
                 .filter(item -> {
-                // 处理父ID为null的情况，默认为0
                     Long currentParentId = item.getParentId() == null ? 0L : item.getParentId();
-                // 过滤出当前父级ID下的菜单
                     return currentParentId.equals(parentId);
                 })
-            // 先按排序号排序，null值排在最后，再按ID排序
+                // 按排序号和ID排序
                 .sorted(Comparator.comparing(SysMenu::getSort, Comparator.nullsLast(Integer::compareTo))
                         .thenComparing(SysMenu::getId))
                 .collect(Collectors.toList());
-    // 遍历当前层级的菜单
+        // 遍历当前菜单列表，构建菜单树节点
         for (SysMenu menu : current) {
-        // 创建菜单节点对象
             UserMenuVO node = new UserMenuVO();
-        // 设置菜单节点的基本属性
             node.setId(menu.getId());
             node.setParentId(menu.getParentId());
             node.setName(menu.getMenuName());
@@ -334,14 +335,17 @@ public class AuthServiceImpl implements AuthService {
             node.setPermissionCode(menu.getPermissionCode());
             node.setVisible(menu.getVisible());
             node.setStatus(menu.getStatus());
-        // 递归构建子菜单
+            // 递归构建子菜单
             node.setChildren(buildMenuTree(menus, menu.getId()));
-        // 将节点添加到树形结构中
             tree.add(node);
         }
         return tree;
     }
 
+    /**
+     * 获取当前登录用户
+     * @return 登录用户对象
+     */
     private LoginUser currentLoginUser() {
         LoginUser loginUser = LoginUserContext.get();
         if (loginUser == null) {
@@ -350,6 +354,11 @@ public class AuthServiceImpl implements AuthService {
         return loginUser;
     }
 
+    /**
+     * 解析令牌
+     * @param authorization 认证信息
+     * @return 令牌字符串
+     */
     private String resolveToken(String authorization) {
         if (!StringUtils.hasText(authorization)) {
             return null;
@@ -358,5 +367,20 @@ public class AuthServiceImpl implements AuthService {
             return authorization.substring(CommonConstants.TOKEN_PREFIX.length());
         }
         return authorization;
+    }
+
+    /**
+     * 转换为登录视图对象
+     * @param authTokens 认证令牌对象
+     * @return 登录视图对象
+     */
+    private LoginVO toLoginVO(AuthTokens authTokens) {
+        return new LoginVO(
+                authTokens.getAccessToken(),
+                authTokens.getRefreshToken(),
+                authTokens.getTokenType(),
+                authTokens.getAccessExpireIn(),
+                authTokens.getRefreshExpireIn()
+        );
     }
 }

@@ -31,6 +31,7 @@ INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `path`, `co
 (214, 210, '重置密码', 'BUTTON', '', '', '', '', 4, 'system:user:reset-password', 1, 1, 'system', NOW(), 'system', NOW(), 0, '重置密码权限'),
 (215, 210, '分配角色', 'BUTTON', '', '', '', '', 5, 'system:user:assign-role', 1, 1, 'system', NOW(), 'system', NOW(), 0, '用户角色分配权限'),
 (216, 210, '用户删除', 'BUTTON', '', '', '', '', 6, 'system:user:delete', 1, 1, 'system', NOW(), 'system', NOW(), 0, '用户删除权限'),
+(217, 210, '强制下线', 'BUTTON', '', '', '', '', 7, 'system:user:kickout', 1, 1, 'system', NOW(), 'system', NOW(), 0, '用户强制下线权限'),
 
 (220, 200, '角色管理', 'MENU', 'role', 'system/role/index', 'SystemRole', 'el-icon-s-custom', 2, 'system:role:view', 1, 1, 'system', NOW(), 'system', NOW(), 0, '角色管理页面'),
 (221, 220, '角色查询', 'BUTTON', '', '', '', '', 1, 'system:role:list', 1, 1, 'system', NOW(), 'system', NOW(), 0, '角色列表权限'),
@@ -79,7 +80,7 @@ INSERT INTO `sys_role_menu` (`id`, `role_id`, `menu_id`) VALUES
 (63, 3, 100),(64, 3, 110),(65, 3, 200),(66, 3, 210),(67, 3, 211),(68, 3, 212),(69, 3, 213),(70, 3, 214),(71, 3, 240),(72, 3, 241),(73, 3, 242),(74, 3, 243),(75, 3, 400),(76, 3, 410),
 -- 审计角色：工作台 + 用户只读 + 角色只读 + 日志查看 + 个人中心
 (77, 4, 100),(78, 4, 110),(79, 4, 200),(80, 4, 210),(81, 4, 211),(82, 4, 220),(83, 4, 221),(84, 4, 300),(85, 4, 310),(86, 4, 311),(87, 4, 320),(88, 4, 321),(89, 4, 400),(90, 4, 410),
-(91, 1, 216),(92, 2, 216),(93, 3, 216);
+(91, 1, 216),(92, 2, 216),(93, 3, 216),(94, 1, 217),(95, 2, 217);
 
 INSERT INTO `sys_login_log` (`id`, `username`, `nickname`, `login_ip`, `browser`, `os`, `login_status`, `message`, `login_time`) VALUES
 (1, 'admin', '超级管理员', '127.0.0.1', 'Chrome', 'Windows', 1, '登录成功', NOW() - INTERVAL 1 DAY),

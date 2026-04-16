@@ -1,16 +1,13 @@
 package com.example.system.service;
 
+import com.example.common.model.result.PageResult;
 import com.example.system.dto.user.UserQueryDTO;
 import com.example.system.dto.user.UserSaveDTO;
 import com.example.system.vo.user.UserDetailVO;
 import com.example.system.vo.user.UserPageVO;
-import com.example.common.model.result.PageResult;
 
 import java.util.List;
 
-/**
- * 用户管理服务。
- */
 public interface UserService {
 
     PageResult<UserPageVO> pageQuery(UserQueryDTO dto);
@@ -26,6 +23,8 @@ public interface UserService {
     void resetPassword(Long id, String password);
 
     void assignRoles(Long id, List<Long> roleIds);
+
+    void kickout(Long id);
 
     void removeUser(Long id);
 }

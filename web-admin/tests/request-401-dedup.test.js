@@ -11,7 +11,7 @@ function loadRequestModule(stubs) {
     .replace("import axios from 'axios'", 'const axios = stubs.axios')
     .replace("import { Message } from 'element-ui'", 'const Message = stubs.Message')
     .replace("import store from '../store'", 'const store = stubs.store')
-    .replace("import { getToken } from './auth'", 'const getToken = stubs.getToken')
+    .replace("import { getToken, getRefreshToken, setAuthTokens } from './auth'", 'const getToken = stubs.getToken; const getRefreshToken = stubs.getRefreshToken; const setAuthTokens = stubs.setAuthTokens')
     .replace("import router from '../router'", 'const router = stubs.router')
     .replace('export default service', 'module.exports = service')
 
@@ -28,7 +28,7 @@ function loadRequestModule(stubs) {
 
 async function main() {
   let responseErrorHandler
-  let logoutCount = 0
+  let clearSessionCount = 0
   let loginRedirectCount = 0
   let messageCount = 0
 
@@ -55,13 +55,15 @@ async function main() {
     },
     store: {
       dispatch(action) {
-        if (action === 'user/logout') {
-          logoutCount += 1
+        if (action === 'user/clearSession') {
+          clearSessionCount += 1
         }
         return Promise.resolve()
       }
     },
     getToken: () => 'expired-token',
+    getRefreshToken: () => '',
+    setAuthTokens: () => {},
     router: {
       push(route) {
         if (route === '/login') {
@@ -73,14 +75,16 @@ async function main() {
 
   assert.ok(responseErrorHandler, 'expected response interceptor error handler to be registered')
 
-  await Promise.allSettled([
-    responseErrorHandler({ response: { status: 401 } }),
-    responseErrorHandler({ response: { status: 401 } }),
-    responseErrorHandler({ response: { status: 401 } })
+  responseErrorHandler({ response: { status: 401 } })
+  responseErrorHandler({ response: { status: 401 } })
+  responseErrorHandler({ response: { status: 401 } })
+
+  await Promise.all([
+    new Promise(resolve => setTimeout(resolve, 50))
   ])
 
   assert.strictEqual(messageCount, 1, 'expected 401 login-expired message to show only once')
-  assert.strictEqual(logoutCount, 1, 'expected logout to run only once for concurrent 401 responses')
+  assert.strictEqual(clearSessionCount, 1, 'expected clear session to run only once for concurrent 401 responses')
   assert.strictEqual(loginRedirectCount, 1, 'expected redirect to login to run only once for concurrent 401 responses')
 
   console.log('request-401-dedup.test.js passed')

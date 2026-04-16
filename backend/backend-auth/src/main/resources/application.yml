@@ -27,7 +27,9 @@ mybatis-plus:
 security:
   jwt:
     secret: backend-manager-secret-key
-    expire-seconds: 7200
+    access-expire-seconds: 1800
+    refresh-expire-seconds: 604800
+    refresh-max-expire-seconds: 2592000
 
 logging:
   level:

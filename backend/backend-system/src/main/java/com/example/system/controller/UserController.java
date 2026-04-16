@@ -22,9 +22,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 用户管理接口。
- */
 @RestController
 @RequestMapping("/api/system/users")
 public class UserController {
@@ -84,6 +81,14 @@ public class UserController {
     @PutMapping("/{id}/roles")
     public ApiResult<Void> assignRoles(@PathVariable Long id, @RequestBody UserRoleAssignDTO dto) {
         userService.assignRoles(id, dto.getRoleIds());
+        return ApiResult.success(null);
+    }
+
+    @OperLog(module = "用户管理", type = "强制下线")
+    @PreAuthorize("@perm.hasPermission('system:user:kickout')")
+    @DeleteMapping("/{id}/session")
+    public ApiResult<Void> kickout(@PathVariable Long id) {
+        userService.kickout(id);
         return ApiResult.success(null);
     }
 

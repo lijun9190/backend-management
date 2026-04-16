@@ -10,6 +10,7 @@ import com.example.common.entity.SysUserRole;
 import com.example.common.exception.BusinessException;
 import com.example.common.model.result.PageResult;
 import com.example.common.model.security.LoginUser;
+import com.example.common.security.LoginSessionManager;
 import com.example.system.dto.user.UserQueryDTO;
 import com.example.system.dto.user.UserSaveDTO;
 import com.example.system.mapper.SysDeptMapper;
@@ -30,9 +31,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * 用户管理服务实现。
- */
 @Service
 public class UserServiceImpl implements UserService {
 
@@ -42,19 +40,22 @@ public class UserServiceImpl implements UserService {
     private final SysUserRoleMapper sysUserRoleMapper;
     private final PasswordEncoder passwordEncoder;
     private final OperationLogService operationLogService;
+    private final LoginSessionManager loginSessionManager;
 
     public UserServiceImpl(SysUserMapper sysUserMapper,
                            SysDeptMapper sysDeptMapper,
                            SysRoleMapper sysRoleMapper,
                            SysUserRoleMapper sysUserRoleMapper,
                            PasswordEncoder passwordEncoder,
-                           OperationLogService operationLogService) {
+                           OperationLogService operationLogService,
+                           LoginSessionManager loginSessionManager) {
         this.sysUserMapper = sysUserMapper;
         this.sysDeptMapper = sysDeptMapper;
         this.sysRoleMapper = sysRoleMapper;
         this.sysUserRoleMapper = sysUserRoleMapper;
         this.passwordEncoder = passwordEncoder;
         this.operationLogService = operationLogService;
+        this.loginSessionManager = loginSessionManager;
     }
 
     @Override
@@ -164,6 +165,20 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    public void kickout(Long id) {
+        SysUser user = sysUserMapper.selectById(id);
+        if (user == null || CommonConstants.DELETED_YES.equals(user.getDeleted())) {
+            throw new BusinessException("用户不存在");
+        }
+        LoginUser currentUser = LoginUserContext.get();
+        if (currentUser != null && id.equals(currentUser.getUserId())) {
+            throw new BusinessException("当前登录用户不允许踢自己下线");
+        }
+        loginSessionManager.invalidateUserSession(id);
+        operationLogService.record("用户管理", "强制下线", "/api/system/users/" + id + "/session", "DELETE", 1, null);
+    }
+
+    @Override
     public void removeUser(Long id) {
         SysUser user = sysUserMapper.selectById(id);
         if (user == null || CommonConstants.DELETED_YES.equals(user.getDeleted())) {
@@ -179,6 +194,7 @@ public class UserServiceImpl implements UserService {
         }
 
         sysUserRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, id));
+        loginSessionManager.invalidateUserSession(id);
         user.setDeleted(CommonConstants.DELETED_YES);
         fillAudit(user, false);
         sysUserMapper.updateById(user);

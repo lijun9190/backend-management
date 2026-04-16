@@ -1,8 +1,4 @@
 -------------------------------------------------------------------------------
 Test set: com.example.auth.ApplicationYamlConfigTest
 -------------------------------------------------------------------------------
-Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.137 s <<< FAILURE! - in com.example.auth.ApplicationYamlConfigTest
-shouldParseExpectedDatasourceAndRedisPasswords  Time elapsed: 0.133 s  <<< FAILURE!
-org.opentest4j.AssertionFailedError: expected: <imooc> but was: <imooc# 中文注释：如果你的 Redis 设置了密码，请在这里填写>
-	at com.example.auth.ApplicationYamlConfigTest.shouldParseExpectedDatasourceAndRedisPasswords(ApplicationYamlConfigTest.java:21)
-
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.078 s - in com.example.auth.ApplicationYamlConfigTest

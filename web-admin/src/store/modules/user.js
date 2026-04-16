@@ -1,8 +1,9 @@
-import { getToken, removeToken, setToken } from '../../utils/auth'
+import { clearAuthTokens, getRefreshToken, getToken, setAuthTokens } from '../../utils/auth'
 import { getProfile, login, logout, updateMyPassword } from '../../api/auth'
 
 const getDefaultState = () => ({
   token: getToken() || '',
+  refreshToken: getRefreshToken() || '',
   userInfo: {},
   roles: [],
   permissions: [],
@@ -16,8 +17,9 @@ export default {
     RESET_STATE(state) {
       Object.assign(state, getDefaultState())
     },
-    SET_TOKEN(state, token) {
-      state.token = token
+    SET_TOKENS(state, payload) {
+      state.token = payload.accessToken
+      state.refreshToken = payload.refreshToken
     },
     SET_PROFILE(state, payload) {
       state.userInfo = payload
@@ -29,20 +31,31 @@ export default {
   actions: {
     async login({ commit }, form) {
       const res = await login(form)
-      setToken(res.data.accessToken)
-      commit('SET_TOKEN', res.data.accessToken)
+      const tokens = {
+        accessToken: res.data.accessToken,
+        refreshToken: res.data.refreshToken
+      }
+      setAuthTokens(tokens)
+      commit('SET_TOKENS', tokens)
     },
     async fetchProfile({ commit }) {
       const res = await getProfile()
       commit('SET_PROFILE', res.data)
       return res.data
     },
-    async logout({ commit }) {
+    async clearSession({ commit, dispatch }) {
+      clearAuthTokens()
+      commit('RESET_STATE')
+      await dispatch('permission/resetRoutes', null, { root: true })
+    },
+    async logout({ dispatch }) {
       try {
-        await logout()
+        await logout({
+          skipAuthRefresh: true,
+          skipUnauthorizedHandler: true
+        })
       } finally {
-        removeToken()
-        commit('RESET_STATE')
+        await dispatch('clearSession')
       }
     },
     async updateMyPassword(_, form) {

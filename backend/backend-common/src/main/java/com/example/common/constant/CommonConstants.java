@@ -1,8 +1,5 @@
 package com.example.common.constant;
 
-/**
- * 通用常量定义。
- */
 public final class CommonConstants {
 
     private CommonConstants() {
@@ -21,4 +18,5 @@ public final class CommonConstants {
 
     public static final String ROLE_SUPER_ADMIN = "SUPER_ADMIN";
     public static final String TOKEN_PREFIX = "Bearer ";
+    public static final String ACCESS_TOKEN_TYPE = "access";
 }

@@ -17,11 +17,11 @@ public class SecurityConfig {
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         return http
-                .csrf(ServerHttpSecurity.CsrfSpec::disable)
-                .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
-                .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
-                .logout(ServerHttpSecurity.LogoutSpec::disable)
-                .authorizeExchange(exchange -> exchange.anyExchange().permitAll())
+                .csrf(ServerHttpSecurity.CsrfSpec::disable)//禁用CSRF保护
+                .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)//禁用HTTP Basic认证
+                .formLogin(ServerHttpSecurity.FormLoginSpec::disable)//禁用表单登录
+                .logout(ServerHttpSecurity.LogoutSpec::disable)//禁用登出功能
+                .authorizeExchange(exchange -> exchange.anyExchange().permitAll())//允许所有请求
                 .build();
     }
 }

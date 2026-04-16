@@ -83,6 +83,7 @@
         ref="menuTreeRef"
         :data="menuTree"
         node-key="id"
+        :check-strictly="true"
         show-checkbox
         default-expand-all
         :props="{ label: 'menuName', children: 'children' }" />
@@ -185,8 +186,7 @@ export default {
     },
     async submitAssign() {
       const checkedKeys = this.$refs.menuTreeRef.getCheckedKeys()
-      const halfKeys = this.$refs.menuTreeRef.getHalfCheckedKeys()
-      await assignRoleMenus(this.currentRoleId, { menuIds: checkedKeys.concat(halfKeys) })
+      await assignRoleMenus(this.currentRoleId, { menuIds: checkedKeys })
       this.$message.success('权限分配成功')
       this.assignDialogVisible = false
     }

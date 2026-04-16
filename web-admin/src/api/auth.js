@@ -8,10 +8,21 @@ export function login(data) {
   })
 }
 
-export function logout() {
+export function refreshToken(data) {
+  return request({
+    url: '/api/auth/refresh',
+    method: 'post',
+    data,
+    skipAuthRefresh: true,
+    skipUnauthorizedHandler: true
+  })
+}
+
+export function logout(config = {}) {
   return request({
     url: '/api/auth/logout',
-    method: 'post'
+    method: 'post',
+    ...config
   })
 }
 

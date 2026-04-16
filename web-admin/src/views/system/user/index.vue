@@ -44,11 +44,12 @@
           </template>
         </el-table-column>
         <el-table-column prop="createTime" label="创建时间" min-width="180" />
-        <el-table-column label="操作" width="320" fixed="right">
+        <el-table-column label="操作" width="380" fixed="right">
           <template slot-scope="{ row }">
             <el-button v-permission="'system:user:edit'" type="text" @click="openEdit(row.id)">编辑</el-button>
             <el-button v-permission="'system:user:assign-role'" type="text" @click="openAssignRole(row)">分配角色</el-button>
             <el-button v-permission="'system:user:reset-password'" type="text" @click="openResetPassword(row)">重置密码</el-button>
+            <el-button v-permission="'system:user:kickout'" type="text" @click="handleKickout(row)">踢下线</el-button>
             <el-button v-permission="'system:user:delete'" type="text" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -146,6 +147,7 @@ import {
   changeUserStatus,
   getUserDetail,
   getUserPage,
+  kickoutUser,
   resetUserPassword,
   saveUser,
   updateUser
@@ -275,6 +277,11 @@ export default {
       await resetUserPassword(this.passwordForm.id, { password: this.passwordForm.password })
       this.$message.success('密码已重置')
       this.passwordDialogVisible = false
+    },
+    async handleKickout(row) {
+      await this.$confirm(`确认强制 ${row.username} 当前会话下线吗？`, '提示', { type: 'warning' })
+      await kickoutUser(row.id)
+      this.$message.success('用户已被强制下线')
     },
     async handleDelete(row) {
       await this.$confirm(`确认删除用户 ${row.username} 吗？`, '提示', { type: 'warning' })

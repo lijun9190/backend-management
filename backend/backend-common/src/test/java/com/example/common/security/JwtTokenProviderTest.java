@@ -11,21 +11,24 @@ import org.springframework.test.util.ReflectionTestUtils;
 class JwtTokenProviderTest {
 
     @Test
-    void shouldCreateAndParseToken() {
+    void shouldCreateAndParseAccessToken() {
         JwtTokenProvider provider = new JwtTokenProvider();
         ReflectionTestUtils.setField(provider, "secret", "unit-test-secret");
-        ReflectionTestUtils.setField(provider, "expireSeconds", 3600L);
+        ReflectionTestUtils.setField(provider, "accessExpireSeconds", 3600L);
 
         LoginUser loginUser = new LoginUser();
         loginUser.setUserId(1L);
         loginUser.setUsername("admin");
         loginUser.setNickname("超级管理员");
 
-        String token = provider.createToken(loginUser);
+        String token = provider.createAccessToken(loginUser, "session-1", 3);
 
         Assertions.assertNotNull(token);
-        Assertions.assertTrue(provider.validateToken(token));
+        Assertions.assertTrue(provider.validateAccessToken(token));
         Assertions.assertEquals(Long.valueOf(1L), provider.getUserId(token));
         Assertions.assertEquals("admin", provider.getUsername(token));
+        Assertions.assertEquals("session-1", provider.getSessionId(token));
+        Assertions.assertEquals(Integer.valueOf(3), provider.getAccessTokenVersion(token));
+        Assertions.assertEquals("access", provider.getTokenType(token));
     }
 }

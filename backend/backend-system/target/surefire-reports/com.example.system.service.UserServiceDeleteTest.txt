@@ -1,4 +1,4 @@
 -------------------------------------------------------------------------------
 Test set: com.example.system.service.UserServiceDeleteTest
 -------------------------------------------------------------------------------
-Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.519 s - in com.example.system.service.UserServiceDeleteTest
+Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.562 s - in com.example.system.service.UserServiceDeleteTest

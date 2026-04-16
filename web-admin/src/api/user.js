@@ -28,6 +28,10 @@ export function assignUserRoles(id, data) {
   return request({ url: `/api/system/users/${id}/roles`, method: 'put', data })
 }
 
+export function kickoutUser(id) {
+  return request({ url: `/api/system/users/${id}/session`, method: 'delete' })
+}
+
 export function removeUser(id) {
   return request({ url: `/api/system/users/${id}`, method: 'delete' })
 }
