@@ -1,4 +1,0 @@
-com\example\gateway\config\CorsConfig.class
-com\example\gateway\filter\AuthTokenGlobalFilter.class
-com\example\gateway\BackendGatewayApplication.class
-com\example\gateway\config\IgnoreWhiteProperties.class
