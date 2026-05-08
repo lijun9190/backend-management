@@ -198,32 +198,48 @@ public class AuthServiceImpl implements AuthService {
      * @return 登录用户对象
      */
     private LoginUser buildLoginUser(SysUser user) {
+        // 创建登录用户对象实例
         LoginUser loginUser = new LoginUser();
+        // 设置用户基本信息
         loginUser.setUserId(user.getId());
         loginUser.setDeptId(user.getDeptId());
         loginUser.setUsername(user.getUsername());
         loginUser.setNickname(user.getNickname());
         loginUser.setStatus(user.getStatus());
         // 获取用户部门信息
+        // 如果用户部门ID为空，则部门信息为null，否则查询数据库获取部门信息
         SysDept dept = user.getDeptId() == null ? null : sysDeptMapper.selectById(user.getDeptId());
+        // 设置用户部门名称
         loginUser.setDeptName(dept == null ? null : dept.getDeptName());
 
         // 获取用户角色编码列表
+        // 根据用户ID查询其拥有的所有角色编码
         List<String> roleCodes = authRoleMapper.selectRoleCodesByUserId(user.getId());
+        // 检查用户是否拥有角色
         if (roleCodes == null || roleCodes.isEmpty()) {
+            // 如果用户没有分配任何角色，抛出业务异常
             throw new BusinessException("当前账号未分配角色，请联系管理员");
         }
+        // 设置用户角色列表
         loginUser.setRoles(roleCodes);
         // 根据用户角色获取权限列表
+        // 判断用户是否为超级管理员
         if (loginUser.isSuperAdmin()) {
+            // 如果是超级管理员，获取所有菜单权限
             loginUser.setPermissions(authMenuMapper.selectAllMenus().stream()
+                    // 提取菜单权限编码
                     .map(SysMenu::getPermissionCode)
+                    // 过滤掉空权限编码
                     .filter(StringUtils::hasText)
+                    // 去重
                     .distinct()
+                    // 收集为List集合
                     .collect(Collectors.toList()));
         } else {
+            // 如果不是超级管理员，只获取用户自身角色对应的权限
             loginUser.setPermissions(authMenuMapper.selectPermissionCodesByUserId(user.getId()));
         }
+        // 返回构建完成的登录用户对象
         return loginUser;
     }
 

@@ -132,13 +132,22 @@ public class RoleServiceImpl implements RoleService {
         return sysMenuMapper.selectMenuIdsByRoleId(roleId);
     }
 
+/**
+ * 填充审计信息方法
+ * @param role 角色对象，需要填充审计信息的实体
+ * @param insert 是否为新增操作，true表示新增，false表示更新
+ */
     private void fillAudit(SysRole role, boolean insert) {
+    // 获取当前登录用户信息
         LoginUser loginUser = LoginUserContext.get();
+    // 获取用户名，如果未登录则使用"system"作为默认值
         String username = loginUser == null ? "system" : loginUser.getUsername();
+    // 如果是新增操作，设置创建人和创建时间
         if (insert) {
             role.setCreateBy(username);
             role.setCreateTime(LocalDateTime.now());
         }
+    // 更新人和更新时间，无论新增还是更新都会设置
         role.setUpdateBy(username);
         role.setUpdateTime(LocalDateTime.now());
     }

@@ -16,7 +16,8 @@ function loadRouterModule() {
     .replace("import VueRouter from 'vue-router'", "const VueRouter = require('vue-router')")
     .replace("import Layout from '../layout/index.vue'", "const Layout = { name: 'Layout' }")
     .replace('export const constantRoutes =', 'const constantRoutes =')
-    .replace('export default router', 'module.exports = { router, constantRoutes }')
+    .replace('export function resetRouter()', 'function resetRouter()')
+    .replace('export default router', 'module.exports = { router, constantRoutes, resetRouter }')
 
   const sandbox = {
     require,
@@ -45,7 +46,16 @@ function createDashboardRoute() {
   }
 }
 
-const { router } = loadRouterModule()
+const { router, resetRouter } = loadRouterModule()
+let duplicateWarningCount = 0
+const originalWarn = console.warn
+console.warn = function (...args) {
+  if (String(args[0]).includes('Duplicate named routes definition')) {
+    duplicateWarningCount += 1
+    return
+  }
+  originalWarn.apply(console, args)
+}
 
 const initialMatch = router.match('/dashboard/index')
 
@@ -56,6 +66,22 @@ assert.notStrictEqual(
 )
 
 router.addRoute(createDashboardRoute())
+router.addRoute(createDashboardRoute())
+
+assert.ok(
+  duplicateWarningCount > 0,
+  'expected adding the same dynamic route twice to reproduce the duplicate named route warning'
+)
+
+duplicateWarningCount = 0
+resetRouter()
+router.addRoute(createDashboardRoute())
+
+assert.strictEqual(
+  duplicateWarningCount,
+  0,
+  'expected resetRouter to remove old dynamic routes before they are added again'
+)
 
 const matched = router.match('/dashboard/index')
 const matchedPaths = matched.matched.map(route => route.path)
@@ -71,4 +97,5 @@ assert.notStrictEqual(
   `expected dynamic dashboard route to win before wildcard route, but got ${matchedPaths.join(' -> ')}`
 )
 
+console.warn = originalWarn
 console.log('router-order.test.js passed')

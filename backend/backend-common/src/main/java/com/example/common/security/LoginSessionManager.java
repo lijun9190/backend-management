@@ -242,29 +242,31 @@ public class LoginSessionManager {
                 refreshTtlSeconds, TimeUnit.SECONDS);
     }
 
+/**
+ * 使指定会话ID失效
+ * @param sessionId 要失效的会话ID
+ */
     private void invalidateSession(String sessionId) {
+        // 检查sessionId是否为空或空白字符串
         if (!StringUtils.hasText(sessionId)) {
             return;
         }
+        // 从Redis中获取登录会话信息  admin:login:session:{sessionId} -> LoginSession
         LoginSession session = redisOperator.get(RedisKeyConstants.loginSessionKey(sessionId), LoginSession.class);
-    /**
-     * 检查会话是否在线
-     * @param session 登录会话
-     * @param sessionId 会话ID
-     * @return 如果会话在线返回true，否则返回false
-     */
+        // 删除登录会话对应的Redis键值
         redisOperator.delete(RedisKeyConstants.loginSessionKey(sessionId));
+        // 如果会话不存在，直接返回
         if (session == null) {
             return;
         }
+        // 删除刷新令牌对应的Redis键值  `admin:login:refresh:{refreshTokenHash}` -> `sessionId`
         redisOperator.delete(RedisKeyConstants.loginRefreshKey(session.getRefreshTokenHash()));
+        // 获取用户当前保存的会话ID    `admin:login:user:{userId}` -> `sessionId`
         String currentSessionId = redisOperator.get(RedisKeyConstants.loginUserKey(session.getUserId()), String.class);
+        // 检查当前会话ID是否与要失效的会话ID一致
         if (sessionId.equals(currentSessionId)) {
+            // 如果一致，删除用户登录信息对应的Redis键值
             redisOperator.delete(RedisKeyConstants.loginUserKey(session.getUserId()));
-    /**
-     * 获取有效的刷新最大过期时间
-     * @return 刷新最大过期时间（秒）
-     */
         }
     }
 
@@ -279,11 +281,7 @@ public class LoginSessionManager {
         String currentSessionId = redisOperator.get(RedisKeyConstants.loginUserKey(session.getUserId()), String.class);
         return sessionId.equals(currentSessionId);
     }
-    /**
-     * 使用SHA-256算法生成哈希值
-     * @param rawToken 原始令牌
-     * @return 哈希后的令牌
-     */
+
 
     private long effectiveRefreshMaxExpireSeconds() {
         return Math.max(refreshExpireSeconds, refreshMaxExpireSeconds);
@@ -294,11 +292,7 @@ public class LoginSessionManager {
         SECURE_RANDOM.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
-    /**
-     * 创建未授权异常
-     * @param message 错误消息
-     * @return 业务异常对象
-     */
+
 
     private String sha256(String rawToken) {
         try {

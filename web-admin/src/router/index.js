@@ -27,10 +27,19 @@ export const constantRoutes = [
   }
 ]
 
-const router = new VueRouter({
-  mode: 'hash',
-  routes: constantRoutes,
-  scrollBehavior: () => ({ y: 0 })
-})
+function createRouter() {
+  return new VueRouter({
+    mode: 'hash',
+    routes: constantRoutes,
+    scrollBehavior: () => ({ y: 0 })
+  })
+}
+
+const router = createRouter()
+
+export function resetRouter() {
+  const freshRouter = createRouter()
+  router.matcher = freshRouter.matcher
+}
 
 export default router

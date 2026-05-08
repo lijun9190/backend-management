@@ -34,21 +34,31 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         try {
+            // 从请求头中获取Authorization字段，解析出token
             String token = resolveToken(request.getHeader("Authorization"));
+            // 根据token获取有效的登录会话
             LoginSession session = loginSessionManager.getValidSession(token);
             if (session != null) {
+                // 从会话中获取登录用户信息
                 LoginUser loginUser = session.getLoginUser();
+                // 将用户权限转换为Spring Security所需的授权列表
                 List<SimpleGrantedAuthority> authorities = loginUser.getPermissions() == null
-                        ? Collections.emptyList()
+                        ? Collections.emptyList()  // 如果权限为空，则返回空列表
                         : loginUser.getPermissions().stream().map(SimpleGrantedAuthority::new).collect(Collectors.toList());
+                // 创建认证令牌，包含用户信息、凭证(设为null)和权限列表
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         loginUser, null, authorities);
+                // 将认证信息设置到安全上下文中
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+                // 将登录用户信息设置到用户上下文中
                 LoginUserContext.set(loginUser);
             }
+            // 执行过滤器链
             filterChain.doFilter(request, response);
         } finally {
+            // 清理用户上下文
             LoginUserContext.clear();
+            // 清理安全上下文
             SecurityContextHolder.clearContext();
         }
     }
