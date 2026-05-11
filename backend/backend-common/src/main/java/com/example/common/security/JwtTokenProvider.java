@@ -10,8 +10,9 @@ import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -19,6 +20,9 @@ import javax.annotation.PostConstruct;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.KeyPair;
@@ -37,6 +41,8 @@ import java.util.Date;
 public class JwtTokenProvider {
 
     private static final Logger log = LoggerFactory.getLogger(JwtTokenProvider.class);
+
+    private static final ResourceLoader RESOURCE_LOADER = new DefaultResourceLoader();
 
     /** 私钥文件路径，仅auth服务配置，用于签名token */
     @Value("${security.jwt.private-key-path:}")
@@ -105,7 +111,7 @@ public class JwtTokenProvider {
                 .claim("av", accessTokenVersion)
                 .issuedAt(now)
                 .expiration(expireAt)
-                .signWith(privateKey)
+                .signWith(privateKey, Jwts.SIG.RS256)
                 .compact();
     }
 
@@ -195,7 +201,8 @@ public class JwtTokenProvider {
         }
         try {
             Claims claims = getClaims(token);
-            return CommonConstants.ACCESS_TOKEN_TYPE.equals(getTokenType(token))
+            Object tokenType = claims.get("typ");
+            return CommonConstants.ACCESS_TOKEN_TYPE.equals(tokenType == null ? null : tokenType.toString())
                     && claims.getExpiration() != null
                     && claims.getExpiration().after(new Date());
         } catch (Exception ex) {
@@ -215,7 +222,7 @@ public class JwtTokenProvider {
     /**
      * 从PEM文件加载RSA私钥，支持PKCS#8和PKCS#1格式。
      *
-     * @param path PEM文件的classpath路径
+     * @param path PEM文件路径，支持classpath路径、classpath:前缀、file:前缀和本地绝对路径
      * @return RSA私钥对象
      */
     private PrivateKey loadPrivateKey(String path) {
@@ -247,7 +254,7 @@ public class JwtTokenProvider {
     /**
      * 从PEM文件加载RSA公钥。
      *
-     * @param path PEM文件的classpath路径
+     * @param path PEM文件路径，支持classpath路径、classpath:前缀、file:前缀和本地绝对路径
      * @return RSA公钥对象
      */
     private PublicKey loadPublicKey(String path) {
@@ -265,7 +272,7 @@ public class JwtTokenProvider {
     /**
      * 从PEM文件中加载RSA密钥对（包含私钥和公钥）。
      *
-     * @param path PEM文件的classpath路径
+     * @param path PEM文件路径，支持classpath路径、classpath:前缀、file:前缀和本地绝对路径
      * @return RSA密钥对，加载失败时返回null
      */
     private KeyPair loadKeyPair(String path) {
@@ -284,14 +291,14 @@ public class JwtTokenProvider {
     }
 
     /**
-     * 从classpath资源中读取PEM文件的完整内容。
+     * 从资源路径中读取PEM文件的完整内容。
      *
-     * @param path classpath资源路径
+     * @param path PEM资源路径
      * @return PEM文件内容字符串
      */
     private String readPemContent(String path) {
         try {
-            Resource resource = new ClassPathResource(path);
+            Resource resource = resolvePemResource(path);
             StringBuilder sb = new StringBuilder();
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8))) {
@@ -304,6 +311,31 @@ public class JwtTokenProvider {
         } catch (IOException e) {
             throw new IllegalStateException("无法读取PEM文件: " + path, e);
         }
+    }
+
+    /**
+     * 解析PEM密钥资源路径，默认兼容原有classpath相对路径，同时支持外部文件挂载。
+     *
+     * @param path 配置中的密钥路径
+     * @return Spring资源对象
+     */
+    private Resource resolvePemResource(String path) {
+        if (!StringUtils.hasText(path)) {
+            throw new IllegalStateException("PEM文件路径不能为空");
+        }
+        String trimmedPath = path.trim();
+        if (trimmedPath.startsWith("classpath:") || trimmedPath.startsWith("file:")) {
+            return RESOURCE_LOADER.getResource(trimmedPath);
+        }
+        try {
+            Path localPath = Paths.get(trimmedPath);
+            if (localPath.isAbsolute()) {
+                return RESOURCE_LOADER.getResource(localPath.toUri().toString());
+            }
+        } catch (InvalidPathException ignored) {
+            // 非本地文件路径时按classpath资源处理，保持旧配置兼容。
+        }
+        return RESOURCE_LOADER.getResource("classpath:" + trimmedPath);
     }
 
     /**

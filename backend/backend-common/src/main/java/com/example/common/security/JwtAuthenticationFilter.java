@@ -4,6 +4,7 @@ import com.example.common.constant.CommonConstants;
 import com.example.common.context.LoginUserContext;
 import com.example.common.model.security.LoginSession;
 import com.example.common.model.security.LoginUser;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -24,6 +25,7 @@ import java.util.stream.Collectors;
  * JWT认证过滤器，负责根据访问令牌恢复当前登录用户上下文。
  */
 @Component
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final LoginSessionManager loginSessionManager;

@@ -4,12 +4,18 @@ import com.example.common.model.security.LoginUser;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.Key;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.util.Base64;
 
 /**
  * JWT令牌提供者测试，使用动态生成的RSA密钥对验证RS256非对称加密功能。
@@ -19,6 +25,9 @@ class JwtTokenProviderTest {
     private PrivateKey privateKey;
     private PublicKey publicKey;
     private JwtTokenProvider provider;
+
+    @TempDir
+    private Path tempDir;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -96,5 +105,47 @@ class JwtTokenProviderTest {
             String tampered = parts[0] + "." + parts[1] + "X" + "." + parts[2];
             Assertions.assertFalse(provider.validateAccessToken(tampered));
         }
+    }
+
+    /**
+     * 验证JWT组件可以从外部文件路径加载RSA密钥，支持生产环境通过挂载文件提供私钥。
+     */
+    @Test
+    void shouldLoadKeysFromExternalFilePath() throws Exception {
+        Path privateKeyFile = tempDir.resolve("jwt-signing-key.pem");
+        Path publicKeyFile = tempDir.resolve("jwt-public-key.pem");
+        writePem(privateKeyFile, "PRIVATE KEY", privateKey);
+        writePem(publicKeyFile, "PUBLIC KEY", publicKey);
+
+        JwtTokenProvider fileProvider = new JwtTokenProvider();
+        ReflectionTestUtils.setField(fileProvider, "privateKeyPath", privateKeyFile.toUri().toString());
+        ReflectionTestUtils.setField(fileProvider, "publicKeyPath", publicKeyFile.toUri().toString());
+        ReflectionTestUtils.setField(fileProvider, "accessExpireSeconds", 3600L);
+
+        fileProvider.init();
+
+        LoginUser loginUser = new LoginUser();
+        loginUser.setUserId(1L);
+        loginUser.setUsername("admin");
+        String token = fileProvider.createAccessToken(loginUser, "session-1", 1);
+
+        Assertions.assertTrue(fileProvider.validateAccessToken(token));
+        Assertions.assertEquals(Long.valueOf(1L), fileProvider.getUserId(token));
+    }
+
+    /**
+     * 将测试生成的RSA密钥写成PEM格式，便于覆盖真实文件加载链路。
+     *
+     * @param path  PEM文件路径
+     * @param label PEM头尾标识
+     * @param key   RSA密钥对象
+     */
+    private void writePem(Path path, String label, Key key) throws Exception {
+        String encoded = Base64.getMimeEncoder(64, "\n".getBytes(StandardCharsets.UTF_8))
+                .encodeToString(key.getEncoded());
+        String content = "-----BEGIN " + label + "-----\n"
+                + encoded
+                + "\n-----END " + label + "-----\n";
+        Files.write(path, content.getBytes(StandardCharsets.UTF_8));
     }
 }

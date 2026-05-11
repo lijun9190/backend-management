@@ -5,9 +5,11 @@ import com.example.auth.dto.LoginDTO;
 import com.example.auth.mapper.SysUserMapper;
 import com.example.common.entity.SysUser;
 import com.example.common.exception.BusinessException;
+import com.example.common.security.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +30,9 @@ class AuthServiceLoginRoleGuardTest {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @MockBean
+    private JwtTokenProvider jwtTokenProvider;
 
     @Test
     @Transactional

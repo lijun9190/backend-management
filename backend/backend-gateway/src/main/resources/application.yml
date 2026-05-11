@@ -27,7 +27,7 @@ spring:
 
 security:
   jwt:
-    public-key-path: keys/public_key.pem
+    public-key-path: ${JWT_PUBLIC_KEY_PATH:keys/public_key.pem}
     access-expire-seconds: 1800
   ignore:
     urls:
