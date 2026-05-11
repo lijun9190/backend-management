@@ -1,8 +1,8 @@
 package com.example.auth.config;
 
-import com.example.auth.security.JwtAuthenticationFilter;
 import com.example.common.constant.CommonConstants;
 import com.example.common.model.result.ApiResult;
+import com.example.common.security.JwtAuthenticationFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
