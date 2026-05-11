@@ -2,20 +2,41 @@ package com.example.common.security;
 
 import com.example.common.model.security.LoginUser;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+
 /**
- * JWT 工具测试，先覆盖最关键的生成与解析能力。
+ * JWT令牌提供者测试，使用动态生成的RSA密钥对验证RS256非对称加密功能。
  */
 class JwtTokenProviderTest {
 
+    private PrivateKey privateKey;
+    private PublicKey publicKey;
+    private JwtTokenProvider provider;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        // 动态生成RSA 2048密钥对用于测试
+        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+        keyPairGenerator.initialize(2048);
+        KeyPair keyPair = keyPairGenerator.generateKeyPair();
+        this.privateKey = keyPair.getPrivate();
+        this.publicKey = keyPair.getPublic();
+
+        this.provider = new JwtTokenProvider();
+        ReflectionTestUtils.setField(provider, "privateKey", privateKey);
+        ReflectionTestUtils.setField(provider, "publicKey", publicKey);
+        ReflectionTestUtils.setField(provider, "accessExpireSeconds", 3600L);
+    }
+
     @Test
     void shouldCreateAndParseAccessToken() {
-        JwtTokenProvider provider = new JwtTokenProvider();
-        ReflectionTestUtils.setField(provider, "secret", "unit-test-secret");
-        ReflectionTestUtils.setField(provider, "accessExpireSeconds", 3600L);
-
         LoginUser loginUser = new LoginUser();
         loginUser.setUserId(1L);
         loginUser.setUsername("admin");
@@ -30,5 +51,50 @@ class JwtTokenProviderTest {
         Assertions.assertEquals("session-1", provider.getSessionId(token));
         Assertions.assertEquals(Integer.valueOf(3), provider.getAccessTokenVersion(token));
         Assertions.assertEquals("access", provider.getTokenType(token));
+    }
+
+    @Test
+    void shouldRejectTokenSignedWithDifferentKey() throws Exception {
+        // 使用另一组密钥签名的token，当前公钥验证应失败
+        KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
+        gen.initialize(2048);
+        KeyPair otherKeyPair = gen.generateKeyPair();
+
+        JwtTokenProvider otherProvider = new JwtTokenProvider();
+        ReflectionTestUtils.setField(otherProvider, "privateKey", otherKeyPair.getPrivate());
+        ReflectionTestUtils.setField(otherProvider, "publicKey", otherKeyPair.getPublic());
+        ReflectionTestUtils.setField(otherProvider, "accessExpireSeconds", 3600L);
+
+        LoginUser loginUser = new LoginUser();
+        loginUser.setUserId(1L);
+        loginUser.setUsername("admin");
+
+        String tokenFromOther = otherProvider.createAccessToken(loginUser, "s1", 1);
+
+        // 用当前provider的公钥验证另一组密钥签发的token，应该失败
+        Assertions.assertFalse(provider.validateAccessToken(tokenFromOther));
+    }
+
+    @Test
+    void shouldRejectEmptyAndNullToken() {
+        Assertions.assertFalse(provider.validateAccessToken(null));
+        Assertions.assertFalse(provider.validateAccessToken(""));
+        Assertions.assertFalse(provider.validateAccessToken("   "));
+    }
+
+    @Test
+    void shouldRejectTamperedToken() {
+        LoginUser loginUser = new LoginUser();
+        loginUser.setUserId(1L);
+        loginUser.setUsername("admin");
+
+        String token = provider.createAccessToken(loginUser, "session-1", 1);
+
+        // 篡改token内容（修改中间一段字符）
+        String[] parts = token.split("\\.");
+        if (parts.length == 3) {
+            String tampered = parts[0] + "." + parts[1] + "X" + "." + parts[2];
+            Assertions.assertFalse(provider.validateAccessToken(tampered));
+        }
     }
 }

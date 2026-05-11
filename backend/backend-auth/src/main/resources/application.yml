@@ -26,7 +26,8 @@ mybatis-plus:
 
 security:
   jwt:
-    secret: backend-manager-secret-key
+    private-key-path: keys/private_key.pem
+    public-key-path: keys/public_key.pem
     access-expire-seconds: 1800
     refresh-expire-seconds: 604800
     refresh-max-expire-seconds: 2592000

@@ -27,3 +27,6 @@ pnpm-debug.log*
 
 # Local temporary output
 temp-*/
+
+# RSA private key (JWT signing key, never commit)
+**/private_key.pem

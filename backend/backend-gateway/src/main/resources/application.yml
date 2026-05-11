@@ -27,7 +27,7 @@ spring:
 
 security:
   jwt:
-    secret: backend-manager-secret-key
+    public-key-path: keys/public_key.pem
     access-expire-seconds: 1800
   ignore:
     urls:

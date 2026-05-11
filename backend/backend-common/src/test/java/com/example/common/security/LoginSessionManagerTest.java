@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -77,14 +79,22 @@ class LoginSessionManagerTest {
     }
 
     private LoginSessionManager createManager() {
-        JwtTokenProvider provider = new JwtTokenProvider();
-        ReflectionTestUtils.setField(provider, "secret", "unit-test-secret");
-        ReflectionTestUtils.setField(provider, "accessExpireSeconds", 600L);
+        try {
+            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+            keyPairGenerator.initialize(2048);
+            KeyPair keyPair = keyPairGenerator.generateKeyPair();
+            JwtTokenProvider provider = new JwtTokenProvider();
+            ReflectionTestUtils.setField(provider, "privateKey", keyPair.getPrivate());
+            ReflectionTestUtils.setField(provider, "publicKey", keyPair.getPublic());
+            ReflectionTestUtils.setField(provider, "accessExpireSeconds", 600L);
 
-        LoginSessionManager manager = new LoginSessionManager(provider, new InMemoryRedisOperator());
-        ReflectionTestUtils.setField(manager, "refreshExpireSeconds", 3600L);
-        ReflectionTestUtils.setField(manager, "refreshMaxExpireSeconds", 7200L);
-        return manager;
+            LoginSessionManager manager = new LoginSessionManager(provider, new InMemoryRedisOperator());
+            ReflectionTestUtils.setField(manager, "refreshExpireSeconds", 3600L);
+            ReflectionTestUtils.setField(manager, "refreshMaxExpireSeconds", 7200L);
+            return manager;
+        } catch (Exception e) {
+            throw new IllegalStateException("创建测试会话管理器失败", e);
+        }
     }
 
     private LoginUser buildLoginUser(Long userId, String username) {
