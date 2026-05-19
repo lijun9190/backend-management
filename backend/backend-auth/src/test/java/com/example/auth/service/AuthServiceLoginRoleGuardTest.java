@@ -1,54 +1,77 @@
 package com.example.auth.service;
 
-import com.example.auth.BackendAuthApplication;
 import com.example.auth.dto.LoginDTO;
+import com.example.auth.mapper.AuthMenuMapper;
+import com.example.auth.mapper.AuthRoleMapper;
+import com.example.auth.mapper.SysDeptMapper;
+import com.example.auth.mapper.SysLoginLogMapper;
 import com.example.auth.mapper.SysUserMapper;
+import com.example.auth.service.impl.AuthServiceImpl;
 import com.example.common.entity.SysUser;
 import com.example.common.exception.BusinessException;
-import com.example.common.security.JwtTokenProvider;
+import com.example.common.security.LoginSessionManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
-@SpringBootTest(classes = BackendAuthApplication.class)
+/**
+ * 登录角色保护测试，使用Mock隔离数据库和Redis依赖。
+ */
 class AuthServiceLoginRoleGuardTest {
 
-    @Autowired
     private AuthService authService;
-
-    @Autowired
     private SysUserMapper sysUserMapper;
-
-    @Autowired
+    private AuthRoleMapper authRoleMapper;
     private PasswordEncoder passwordEncoder;
 
-    @MockBean
-    private JwtTokenProvider jwtTokenProvider;
+    /**
+     * 初始化认证服务及其依赖，保证登录校验测试不依赖真实数据库。
+     */
+    @BeforeEach
+    void setUp() {
+        sysUserMapper = mock(SysUserMapper.class);
+        SysDeptMapper sysDeptMapper = mock(SysDeptMapper.class);
+        SysLoginLogMapper sysLoginLogMapper = mock(SysLoginLogMapper.class);
+        authRoleMapper = mock(AuthRoleMapper.class);
+        AuthMenuMapper authMenuMapper = mock(AuthMenuMapper.class);
+        LoginSessionManager loginSessionManager = mock(LoginSessionManager.class);
+        passwordEncoder = mock(PasswordEncoder.class);
+        authService = new AuthServiceImpl(
+                sysUserMapper,
+                sysDeptMapper,
+                sysLoginLogMapper,
+                authRoleMapper,
+                authMenuMapper,
+                loginSessionManager,
+                passwordEncoder
+        );
+    }
 
+    /**
+     * 用户没有任何角色时应拒绝登录，并返回清晰的业务错误。
+     */
     @Test
-    @Transactional
     void loginShouldRejectUserWithoutRoles() {
         SysUser user = new SysUser();
+        user.setId(100L);
         user.setDeptId(1L);
-        user.setUsername("no-role-login-" + System.currentTimeMillis());
-        user.setPassword(passwordEncoder.encode("Admin@123456"));
+        user.setUsername("no-role-login");
+        user.setPassword("encoded-password");
         user.setNickname("No Role");
         user.setStatus(1);
         user.setDeleted(0);
-        user.setCreateBy("test");
-        user.setCreateTime(LocalDateTime.now());
-        user.setUpdateBy("test");
-        user.setUpdateTime(LocalDateTime.now());
-        sysUserMapper.insert(user);
+        when(sysUserMapper.selectByUsername(user.getUsername())).thenReturn(user);
+        when(passwordEncoder.matches(anyString(), anyString())).thenReturn(true);
+        when(authRoleMapper.selectRoleCodesByUserId(user.getId())).thenReturn(Collections.emptyList());
 
         LoginDTO dto = new LoginDTO();
         dto.setUsername(user.getUsername());

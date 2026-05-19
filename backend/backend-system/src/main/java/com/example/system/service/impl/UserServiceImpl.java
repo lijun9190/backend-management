@@ -135,6 +135,8 @@ public class UserServiceImpl implements UserService {
         user.setStatus(status);
         fillAudit(user, false);
         sysUserMapper.updateById(user);
+        // 用户状态变化会影响登录资格，立即清理会话避免禁用账号继续访问。
+        loginSessionManager.invalidateUserSession(id);
         operationLogService.record("用户管理", "状态切换", "/api/system/users/" + id + "/status", "PUT", 1, null);
     }
 
@@ -147,6 +149,8 @@ public class UserServiceImpl implements UserService {
         user.setPassword(passwordEncoder.encode(password));
         fillAudit(user, false);
         sysUserMapper.updateById(user);
+        // 密码重置后旧会话不再可信，强制用户使用新密码重新登录。
+        loginSessionManager.invalidateUserSession(id);
         operationLogService.record("用户管理", "重置密码", "/api/system/users/" + id + "/reset-password", "PUT", 1, null);
     }
 
@@ -161,6 +165,8 @@ public class UserServiceImpl implements UserService {
                 sysUserRoleMapper.insert(userRole);
             }
         }
+        // 角色变更会改变权限集合，清理旧会话避免继续使用缓存权限。
+        loginSessionManager.invalidateUserSession(id);
         operationLogService.record("用户管理", "分配角色", "/api/system/users/" + id + "/roles", "PUT", 1, null);
     }
 

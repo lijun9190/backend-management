@@ -22,6 +22,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 
 @Component
 @RequiredArgsConstructor
@@ -83,8 +84,7 @@ public class AuthTokenGlobalFilter implements GlobalFilter, Ordered {
 
     private Mono<Void> writeUnauthorized(ServerHttpResponse response, String message) {
         response.setStatusCode(HttpStatus.UNAUTHORIZED);
-        response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
-        response.getHeaders().set(HttpHeaders.CONTENT_ENCODING, StandardCharsets.UTF_8.name());
+        response.getHeaders().setContentType(new MediaType(MediaType.APPLICATION_JSON, Collections.singletonMap("charset", StandardCharsets.UTF_8.name())));
         byte[] bytes = toBytes(ApiResult.fail(CommonConstants.UNAUTHORIZED_CODE, message));
         return response.writeWith(Mono.just(response.bufferFactory().wrap(bytes)));
     }

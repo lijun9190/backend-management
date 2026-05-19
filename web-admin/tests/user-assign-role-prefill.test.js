@@ -17,6 +17,7 @@ function loadUserComponent(stubs = {}) {
     const changeUserStatus = stubs.changeUserStatus || (() => Promise.resolve())
     const getUserDetail = stubs.getUserDetail || (() => Promise.resolve({ data: {} }))
     const getUserPage = stubs.getUserPage || (() => Promise.resolve({ data: {} }))
+    const kickoutUser = stubs.kickoutUser || (() => Promise.resolve())
     const removeUser = stubs.removeUser || (() => Promise.resolve())
     const resetUserPassword = stubs.resetUserPassword || (() => Promise.resolve())
     const saveUser = stubs.saveUser || (() => Promise.resolve())
@@ -28,7 +29,7 @@ function loadUserComponent(stubs = {}) {
 
   const script = scriptMatch[1]
     .replace(
-      /import\s*\{\s*assignUserRoles,\s*changeUserStatus,\s*getUserDetail,\s*getUserPage,\s*resetUserPassword,\s*saveUser,\s*updateUser\s*\}\s*from\s*'..\/..\/..\/api\/user'/,
+      /import\s*\{\s*assignUserRoles,\s*changeUserStatus,\s*getUserDetail,\s*getUserPage,\s*kickoutUser,\s*resetUserPassword,\s*saveUser,\s*updateUser\s*\}\s*from\s*'..\/..\/..\/api\/user'/,
       userApiStub
     )
     .replace(/import\s*\{\s*removeUser\s*\}\s*from\s*'..\/..\/..\/api\/user'/, '')

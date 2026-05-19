@@ -6,14 +6,14 @@ spring:
     name: backend-system
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:13306/backend-management?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
-    username: root # 中文注释：这里改成你的 MySQL 用户名
-    password: 123456 # 中文注释：这里改成你的 MySQL 密码
+    url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:13306/backend-management?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${MYSQL_USERNAME:root} # 中文注释：生产环境请通过环境变量覆盖数据库用户名
+    password: ${MYSQL_PASSWORD:} # 中文注释：生产环境请通过环境变量提供数据库密码
   redis:
-    host: 192.168.150.199 # 中文注释：这里改成你的 Redis 地址
-    port: 6379 # 中文注释：这里改成你的 Redis 端口
-    password: imooc # 中文注释：如果你的 Redis 设置了密码，请在这里填写
-    database: 0
+    host: ${REDIS_HOST:127.0.0.1} # 中文注释：生产环境请通过环境变量覆盖Redis地址
+    port: ${REDIS_PORT:6379} # 中文注释：生产环境请通过环境变量覆盖Redis端口
+    password: ${REDIS_PASSWORD:} # 中文注释：生产环境请通过环境变量提供Redis密码
+    database: ${REDIS_DATABASE:0}
     timeout: 3000ms
 
 mybatis-plus:

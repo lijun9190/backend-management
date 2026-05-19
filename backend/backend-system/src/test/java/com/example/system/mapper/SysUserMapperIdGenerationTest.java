@@ -1,44 +1,29 @@
 package com.example.system.mapper;
 
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
 import com.example.common.entity.SysUser;
-import com.example.system.BackendSystemApplication;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.lang.reflect.Field;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@SpringBootTest(classes = BackendSystemApplication.class)
+/**
+ * 用户ID生成策略测试，避免依赖真实数据库即可验证实体映射约束。
+ */
 class SysUserMapperIdGenerationTest {
 
-    @Autowired
-    private SysUserMapper sysUserMapper;
-
+    /**
+     * 验证用户主键声明为数据库自增，防止误改为雪花ID等策略。
+     */
     @Test
-    @Transactional
-    void insertShouldUseDatabaseAutoIncrementId() {
-        SysUser user = new SysUser();
-        user.setDeptId(1L);
-        user.setUsername("id-test-" + System.currentTimeMillis());
-        user.setPassword("test");
-        user.setNickname("ID Test");
-        user.setRealName("ID Test");
-        user.setStatus(1);
-        user.setDeleted(0);
-        user.setCreateBy("test");
-        user.setCreateTime(LocalDateTime.now());
-        user.setUpdateBy("test");
-        user.setUpdateTime(LocalDateTime.now());
+    void userIdShouldUseDatabaseAutoIncrementStrategy() throws Exception {
+        Field idField = SysUser.class.getDeclaredField("id");
+        TableId tableId = idField.getAnnotation(TableId.class);
 
-        int rows = sysUserMapper.insert(user);
-
-        assertEquals(1, rows);
-        assertNotNull(user.getId(), "insert should populate generated id back to entity");
-        assertTrue(user.getId() > 0, "insert should use a positive database generated id");
+        assertNotNull(tableId);
+        assertEquals(IdType.AUTO, tableId.type());
     }
 }

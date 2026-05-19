@@ -6,6 +6,7 @@ import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWeb
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -25,7 +26,7 @@ import reactor.core.publisher.Mono;
         "security.ignore.urls[0]=/test/ping",
         "spring.cloud.gateway.routes[0].id=test-route",
         "spring.cloud.gateway.routes[0].uri=http://127.0.0.1:65535",
-        "spring.cloud.gateway.routes[0].predicates[0]=Path=/unused/**"
+        "spring.cloud.gateway.routes[0].predicates[0]=Path=/api/system/**"
 })
 class GatewaySecurityConfigTest {
 
@@ -41,6 +42,16 @@ class GatewaySecurityConfigTest {
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(String.class).isEqualTo("pong");
+    }
+
+    @Test
+    void unauthorizedResponseShouldUseJsonContentTypeWithoutContentEncodingCharset() {
+        webTestClient.get()
+                .uri("/api/system/users/page")
+                .exchange()
+                .expectStatus().isUnauthorized()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
+                .expectHeader().doesNotExist(HttpHeaders.CONTENT_ENCODING);
     }
 
     @Configuration

@@ -135,14 +135,20 @@ SOURCE backend/sql/data.sql;
 
 ### 5.2 Redis
 
-确保 Redis 可用，默认配置：
+确保 Redis 可用。连接信息通过环境变量覆盖：
 
-- host: `192.168.150.199`
-- port: `6379`
-- password: `imooc`
-- db: `0`
+- `REDIS_HOST`
+- `REDIS_PORT`
+- `REDIS_PASSWORD`
+- `REDIS_DATABASE`
 
-如需本地运行，请按你的环境修改以下文件：
+如需本地运行，也可以通过本机环境变量指定数据库连接：
+
+- `MYSQL_URL`
+- `MYSQL_USERNAME`
+- `MYSQL_PASSWORD`
+
+配置文件位置：
 
 - `backend/backend-gateway/src/main/resources/application.yml`
 - `backend/backend-auth/src/main/resources/application.yml`

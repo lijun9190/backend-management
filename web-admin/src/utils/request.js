@@ -93,7 +93,6 @@ service.interceptors.request.use(config => {
 
 service.interceptors.response.use(
   response => {
-    console.log('response', response)
     const res = response.data
     if (res.code !== 200) {
       Message.error(res.message || '请求失败')
@@ -102,16 +101,6 @@ service.interceptors.response.use(
     return res
   },
   async error => {
-    console.log('axios error object', {
-      name: error.name,
-      message: error.message,
-      code: error.code,
-      status: error.status,
-      config: error.config,
-      request: error.request,
-      response: error.response
-    })
-
     const response = error.response || {}
     const status = response.status
     const originalConfig = error.config || {}

@@ -6,18 +6,18 @@ import org.springframework.core.io.ClassPathResource;
 
 import java.util.Properties;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ApplicationYamlConfigTest {
 
     @Test
-    void shouldParseExpectedDatasourceAndRedisPasswords() {
+    void shouldUseEnvironmentPlaceholdersForSensitiveConnectionConfig() {
         YamlPropertiesFactoryBean factoryBean = new YamlPropertiesFactoryBean();
         factoryBean.setResources(new ClassPathResource("application.yml"));
 
         Properties properties = factoryBean.getObject();
 
-        assertEquals("123456", properties.getProperty("spring.datasource.password"));
-        assertEquals("imooc", properties.getProperty("spring.redis.password"));
+        assertTrue(properties.getProperty("spring.datasource.password").contains("MYSQL_PASSWORD"));
+        assertTrue(properties.getProperty("spring.redis.password").contains("REDIS_PASSWORD"));
     }
 }
