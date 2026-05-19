@@ -1,7 +1,6 @@
 package com.example.auth.service.impl;
 
 import com.example.auth.dto.LoginDTO;
-import com.example.auth.dto.RefreshTokenDTO;
 import com.example.auth.dto.UpdatePasswordDTO;
 import com.example.auth.mapper.AuthMenuMapper;
 import com.example.auth.mapper.AuthRoleMapper;
@@ -9,6 +8,7 @@ import com.example.auth.mapper.SysDeptMapper;
 import com.example.auth.mapper.SysLoginLogMapper;
 import com.example.auth.mapper.SysUserMapper;
 import com.example.auth.service.AuthService;
+import com.example.auth.service.LoginAttemptService;
 import com.example.auth.vo.LoginVO;
 import com.example.auth.vo.UserMenuVO;
 import com.example.auth.vo.UserProfileVO;
@@ -50,6 +50,7 @@ public class AuthServiceImpl implements AuthService {
     private final AuthMenuMapper authMenuMapper;
     private final LoginSessionManager loginSessionManager;
     private final PasswordEncoder passwordEncoder;
+    private final LoginAttemptService loginAttemptService;
 
     /**
      * 构造函数，注入所有依赖
@@ -60,7 +61,8 @@ public class AuthServiceImpl implements AuthService {
                            AuthRoleMapper authRoleMapper,
                            AuthMenuMapper authMenuMapper,
                            LoginSessionManager loginSessionManager,
-                           PasswordEncoder passwordEncoder) {
+                           PasswordEncoder passwordEncoder,
+                           LoginAttemptService loginAttemptService) {
         this.sysUserMapper = sysUserMapper;
         this.sysDeptMapper = sysDeptMapper;
         this.sysLoginLogMapper = sysLoginLogMapper;
@@ -68,6 +70,7 @@ public class AuthServiceImpl implements AuthService {
         this.authMenuMapper = authMenuMapper;
         this.loginSessionManager = loginSessionManager;
         this.passwordEncoder = passwordEncoder;
+        this.loginAttemptService = loginAttemptService;
     }
 
     /**
@@ -79,21 +82,26 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public LoginVO login(LoginDTO dto, HttpServletRequest request) {
+        String loginIp = IpUtils.getIp(request);
+        loginAttemptService.checkAllowed(dto.getUsername(), loginIp);
         // 根据用户名查询用户
         SysUser user = sysUserMapper.selectByUsername(dto.getUsername());
         // 判断用户是否存在或已被删除
         if (user == null || Integer.valueOf(CommonConstants.DELETED_YES).equals(user.getDeleted())) {
             recordLoginLog(dto.getUsername(), null, request, 0, "用户名不存在");
+            loginAttemptService.recordFailure(dto.getUsername(), loginIp);
             throw new BusinessException("用户名或密码错误");
         }
         // 判断用户是否被禁用
         if (user.getStatus() == null || user.getStatus().equals(CommonConstants.STATUS_DISABLED)) {
             recordLoginLog(dto.getUsername(), user.getNickname(), request, 0, "账号已被禁用");
+            loginAttemptService.recordFailure(dto.getUsername(), loginIp);
             throw new BusinessException("账号已被禁用，请联系管理员");
         }
         // 验证密码
         if (!passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
             recordLoginLog(dto.getUsername(), user.getNickname(), request, 0, "密码错误");
+            loginAttemptService.recordFailure(dto.getUsername(), loginIp);
             throw new BusinessException("用户名或密码错误");
         }
 
@@ -103,6 +111,7 @@ public class AuthServiceImpl implements AuthService {
             loginUser = buildLoginUser(user);
         } catch (BusinessException exception) {
             recordLoginLog(dto.getUsername(), user.getNickname(), request, 0, exception.getMessage());
+            loginAttemptService.recordFailure(dto.getUsername(), loginIp);
             throw exception;
         }
 
@@ -110,17 +119,18 @@ public class AuthServiceImpl implements AuthService {
         AuthTokens authTokens = loginSessionManager.createSession(loginUser);
         // 记录登录日志
         recordLoginLog(dto.getUsername(), user.getNickname(), request, 1, "登录成功");
+        loginAttemptService.clear(dto.getUsername(), loginIp);
         return toLoginVO(authTokens);
     }
 
     /**
      * 刷新访问令牌
-     * @param dto 刷新令牌数据传输对象
+     * @param refreshToken 刷新令牌
      * @return 登录结果视图对象
      */
     @Override
-    public LoginVO refreshToken(RefreshTokenDTO dto) {
-        return toLoginVO(loginSessionManager.refreshSession(dto.getRefreshToken()));
+    public LoginVO refreshToken(String refreshToken) {
+        return toLoginVO(loginSessionManager.refreshSession(refreshToken));
     }
 
     /**

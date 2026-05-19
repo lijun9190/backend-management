@@ -63,8 +63,8 @@ export default {
     async login({ commit }, form) {
       const res = await login(form)
       const tokens = {
-        accessToken: res.data.accessToken,
-        refreshToken: res.data.refreshToken
+        accessToken: 'cookie-session',
+        refreshToken: 'cookie-session'
       }
       setAuthTokens(tokens)
       commit('SET_TOKENS', tokens)

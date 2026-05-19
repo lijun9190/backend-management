@@ -45,6 +45,7 @@ class AuthServiceLoginRoleGuardTest {
         AuthMenuMapper authMenuMapper = mock(AuthMenuMapper.class);
         LoginSessionManager loginSessionManager = mock(LoginSessionManager.class);
         passwordEncoder = mock(PasswordEncoder.class);
+        LoginAttemptService loginAttemptService = mock(LoginAttemptService.class);
         authService = new AuthServiceImpl(
                 sysUserMapper,
                 sysDeptMapper,
@@ -52,7 +53,8 @@ class AuthServiceLoginRoleGuardTest {
                 authRoleMapper,
                 authMenuMapper,
                 loginSessionManager,
-                passwordEncoder
+                passwordEncoder,
+                loginAttemptService
         );
     }
 

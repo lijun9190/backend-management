@@ -59,13 +59,13 @@ async function main() {
           post(url, data) {
             refreshCallCount += 1
             assert.strictEqual(url, '/api/auth/refresh')
-            assert.strictEqual(data.refreshToken, 'refresh-token-1')
+            assert.strictEqual(data.refreshToken, undefined)
             return Promise.resolve({
               data: {
                 code: 200,
                 data: {
-                  accessToken: 'access-token-2',
-                  refreshToken: 'refresh-token-2'
+                  accessExpireIn: 1800,
+                  refreshExpireIn: 604800
                 }
               }
             })
@@ -111,11 +111,11 @@ async function main() {
 
   assert.strictEqual(refreshCallCount, 1, 'expected refresh endpoint to be called once')
   assert.ok(storedTokens, 'expected refreshed tokens to be stored')
-  assert.strictEqual(storedTokens.accessToken, 'access-token-2')
-  assert.strictEqual(storedTokens.refreshToken, 'refresh-token-2')
+  assert.strictEqual(storedTokens.accessToken, 'cookie-session')
+  assert.strictEqual(storedTokens.refreshToken, 'cookie-session')
   assert.ok(retryRequestConfig, 'expected original request to be retried')
   assert.strictEqual(retryRequestConfig._retry, true, 'expected retried request to be marked')
-  assert.strictEqual(retryRequestConfig.headers.Authorization, 'Bearer access-token-2')
+  assert.strictEqual(retryRequestConfig.headers.Authorization, undefined)
   assert.deepStrictEqual(result, { code: 200, data: { ok: true } })
 
   console.log('request-refresh-retry.test.js passed')

@@ -14,6 +14,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
+import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -53,6 +54,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         try {
             String token = resolveToken(request.getHeader("Authorization"));
+            if (!StringUtils.hasText(token)) {
+                token = resolveTokenFromCookie(request);
+            }
             LoginSession session = loginSessionManager.getValidSession(token);
             if (session != null) {
                 LoginUser loginUser = session.getLoginUser();
@@ -85,5 +89,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return authorization.substring(CommonConstants.TOKEN_PREFIX.length());
         }
         return authorization;
+    }
+
+    /**
+     * 从HttpOnly Cookie中解析访问令牌，避免前端JavaScript读取令牌明文。
+     *
+     * @param request HTTP请求
+     * @return 访问令牌；不存在时返回null
+     */
+    private String resolveTokenFromCookie(HttpServletRequest request) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return null;
+        }
+        for (Cookie cookie : cookies) {
+            if (CommonConstants.ACCESS_TOKEN_COOKIE.equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
     }
 }

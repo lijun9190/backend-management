@@ -19,4 +19,6 @@ public final class CommonConstants {
     public static final String ROLE_SUPER_ADMIN = "SUPER_ADMIN";
     public static final String TOKEN_PREFIX = "Bearer ";
     public static final String ACCESS_TOKEN_TYPE = "access";
+    public static final String ACCESS_TOKEN_COOKIE = "ADMIN_DEMO_ACCESS_TOKEN";
+    public static final String REFRESH_TOKEN_COOKIE = "ADMIN_DEMO_REFRESH_TOKEN";
 }

@@ -3,45 +3,47 @@ const fs = require('fs')
 const path = require('path')
 const vm = require('vm')
 
-function loadAuthModule(stubs) {
+function loadAuthModule(localStorage) {
   const filePath = path.resolve(__dirname, '../src/utils/auth.js')
   const source = fs.readFileSync(filePath, 'utf8')
   const transformed = source
-    .replace("import Cookies from 'js-cookie'", 'const Cookies = stubs.Cookies')
     .replace(/export function /g, 'function ')
-    .concat('\nmodule.exports = { setToken, setRefreshToken, setAuthTokens }\n')
+    .concat('\nmodule.exports = { getToken, getRefreshToken, setToken, setRefreshToken, setAuthTokens, clearAuthTokens }\n')
 
   const sandbox = {
     module: { exports: {} },
     exports: {},
-    stubs
+    localStorage
   }
   vm.runInNewContext(transformed, sandbox, { filename: filePath })
   return sandbox.module.exports
 }
 
 function main() {
-  const writes = []
-  const auth = loadAuthModule({
-    Cookies: {
-      set(key, value, options) {
-        writes.push({ key, value, options })
-      }
+  const store = {}
+  const localStorage = {
+    getItem(key) {
+      return store[key]
+    },
+    setItem(key, value) {
+      store[key] = value
+    },
+    removeItem(key) {
+      delete store[key]
     }
-  })
-
-  auth.setAuthTokens({
-    accessToken: 'access-token',
-    refreshToken: 'refresh-token'
-  })
-
-  assert.strictEqual(writes.length, 2, 'expected both access and refresh token cookies to be written')
-  for (const write of writes) {
-    assert.strictEqual(write.options.sameSite, 'Strict')
-    assert.strictEqual(write.options.secure, true)
-    assert.strictEqual(write.options.path, '/')
   }
-  assert.ok(writes[0].options.expires < writes[1].options.expires, 'expected refresh token cookie to live longer than access token cookie')
+  const auth = loadAuthModule(localStorage)
+
+  auth.setAuthTokens({ accessToken: 'cookie-session', refreshToken: 'cookie-session' })
+
+  assert.strictEqual(auth.getToken(), 'cookie-session')
+  assert.strictEqual(auth.getRefreshToken(), 'cookie-session')
+  assert.ok(!Object.keys(store).some(key => key.includes('TOKEN')), 'expected local state to avoid storing token values')
+
+  auth.clearAuthTokens()
+
+  assert.strictEqual(auth.getToken(), '')
+  assert.strictEqual(auth.getRefreshToken(), '')
 
   console.log('auth-cookie-options.test.js passed')
 }

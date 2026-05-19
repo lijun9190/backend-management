@@ -12,6 +12,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import javax.servlet.http.Cookie;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import java.util.Collections;
@@ -84,6 +85,24 @@ class JwtAuthenticationFilterTest {
         Assertions.assertEquals("access-token", loginSessionManager.requestToken);
         Assertions.assertNull(SecurityContextHolder.getContext().getAuthentication());
         Assertions.assertNull(LoginUserContext.get());
+    }
+
+    /**
+     * 验证访问令牌可从HttpOnly Cookie中解析，避免前端JavaScript持有令牌明文。
+     */
+    @Test
+    void shouldResolveAccessTokenFromCookie() throws Exception {
+        LoginSession session = new LoginSession();
+        session.setLoginUser(new LoginUser());
+        TestLoginSessionManager loginSessionManager = new TestLoginSessionManager(session);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(loginSessionManager);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setCookies(new Cookie(CommonConstants.ACCESS_TOKEN_COOKIE, "cookie-access-token"));
+
+        filter.doFilter(request, new MockHttpServletResponse(), (request1, response) -> {
+        });
+
+        Assertions.assertEquals("cookie-access-token", loginSessionManager.requestToken);
     }
 
     /**

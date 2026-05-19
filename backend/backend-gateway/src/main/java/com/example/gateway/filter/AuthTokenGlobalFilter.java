@@ -53,6 +53,11 @@ public class AuthTokenGlobalFilter implements GlobalFilter, Ordered {
     // 从请求头中解析token
         String token = resolveToken(request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION));
         if (!StringUtils.hasText(token)) {
+            token = request.getCookies().getFirst(CommonConstants.ACCESS_TOKEN_COOKIE) == null
+                    ? null
+                    : request.getCookies().getFirst(CommonConstants.ACCESS_TOKEN_COOKIE).getValue();
+        }
+        if (!StringUtils.hasText(token)) {
             return writeUnauthorized(exchange.getResponse(), "未检测到登录 token");
         }
 

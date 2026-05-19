@@ -25,6 +25,12 @@ mybatis-plus:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 security:
+  cookie:
+    secure: ${COOKIE_SECURE:false}
+  login-attempt:
+    max-failures: ${LOGIN_MAX_FAILURES:5}
+    lock-minutes: ${LOGIN_LOCK_MINUTES:15}
+    failure-window-minutes: ${LOGIN_FAILURE_WINDOW_MINUTES:15}
   jwt:
     private-key-path: ${JWT_PRIVATE_KEY_PATH:keys/private_key.pem}
     public-key-path: ${JWT_PUBLIC_KEY_PATH:keys/public_key.pem}

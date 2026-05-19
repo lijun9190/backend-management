@@ -12,7 +12,7 @@ public interface AuthService {
 
     LoginVO login(LoginDTO dto, HttpServletRequest request);
 
-    LoginVO refreshToken(RefreshTokenDTO dto);
+    LoginVO refreshToken(String refreshToken);
 
     void logout(String authorization);
 

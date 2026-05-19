@@ -6,12 +6,14 @@ import router from '../router'
 
 const service = axios.create({
   baseURL: process.env.VUE_APP_BASE_API,
-  timeout: 15000
+  timeout: 15000,
+  withCredentials: true
 })
 
 const refreshClient = axios.create({
   baseURL: process.env.VUE_APP_BASE_API,
-  timeout: 15000
+  timeout: 15000,
+  withCredentials: true
 })
 
 let unauthorizedHandled = false
@@ -55,15 +57,15 @@ async function refreshAccessToken() {
     throw new Error('NO_REFRESH_TOKEN')
   }
   refreshPromise = refreshClient.post('/api/auth/refresh', {
-    refreshToken
+    refreshToken: undefined
   }).then(response => {
     const res = response.data
     if (!res || res.code !== 200 || !res.data) {
       throw new Error((res && res.message) || '刷新 access token 失败')
     }
     const tokens = {
-      accessToken: res.data.accessToken,
-      refreshToken: res.data.refreshToken
+      accessToken: 'cookie-session',
+      refreshToken: 'cookie-session'
     }
     setAuthTokens(tokens)
     store.commit('user/SET_TOKENS', tokens)
@@ -83,8 +85,6 @@ service.interceptors.request.use(config => {
       activeToken = token
       unauthorizedHandled = false
     }
-    config.headers = config.headers || {}
-    config.headers.Authorization = `Bearer ${token}`
   } else {
     activeToken = ''
   }
@@ -120,7 +120,7 @@ service.interceptors.response.use(
           const tokens = await refreshAccessToken()
           originalConfig._retry = true
           originalConfig.headers = originalConfig.headers || {}
-          originalConfig.headers.Authorization = `Bearer ${tokens.accessToken}`
+          delete originalConfig.headers.Authorization
           return service.request(originalConfig)
         } catch (refreshError) {
           await clearSessionAndRedirect('登录状态已失效，请重新登录')

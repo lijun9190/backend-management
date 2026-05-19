@@ -16,6 +16,8 @@
 - 单端在线
 - `access token` 自动刷新
 - `refresh token rotation`
+- 认证令牌通过 `HttpOnly Cookie` 保存，前端不读取 token 明文
+- 登录失败防爆破，默认同一账号和 IP 连续失败 5 次后锁定 15 分钟
 - 续签绝对上限
 - 管理员手动强制踢用户下线
 
@@ -27,10 +29,12 @@
   - JWT
   - 短有效期
   - 给 `gateway/auth/system` 鉴权使用
+  - 通过 `HttpOnly Cookie` 下发，前端 JavaScript 不直接读取
 - `refresh token`
   - 随机字符串
   - 只给 `auth` 服务刷新接口使用
   - 每次刷新都会轮换
+  - 通过 `HttpOnly Cookie` 下发，刷新接口从 Cookie 读取
 - `session`
   - Redis 中的真正登录态
   - 通过 `sessionId` 管理单端在线、刷新、登出、踢下线
@@ -154,6 +158,13 @@ SOURCE backend/sql/data.sql;
 - `backend/backend-auth/src/main/resources/application.yml`
 - `backend/backend-system/src/main/resources/application.yml`
 
+认证 Cookie 与登录失败锁定可通过环境变量调整：
+
+- `COOKIE_SECURE`：生产 HTTPS 环境建议设为 `true`
+- `LOGIN_MAX_FAILURES`：触发锁定的失败次数，默认 `5`
+- `LOGIN_LOCK_MINUTES`：锁定分钟数，默认 `15`
+- `LOGIN_FAILURE_WINDOW_MINUTES`：失败计数窗口分钟数，默认 `15`
+
 ### 5.3 关键认证配置
 
 当前默认值：
@@ -262,6 +273,8 @@ Admin@123456
 1. 如果本地仍有 refresh token，则先调用 `/api/auth/refresh`
 2. 刷新成功后自动重放原请求
 3. 如果 refresh 失败，则清空本地状态并跳回登录页
+
+当前 refresh token 存放在 `HttpOnly Cookie` 中，前端只保留“已登录”状态标记，不保存 token 明文。
 
 ### 强制踢下线
 
