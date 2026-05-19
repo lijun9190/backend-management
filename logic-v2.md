@@ -63,6 +63,8 @@
 - refresh token 轮换
 - refresh 后旧 access token 立刻失效
 - 管理员可强制踢人下线
+- 用户禁用、重置密码、角色变更后会立即清理现有会话
+- 登录失败防爆破
 - 会话续签有绝对上限，不会无限续命
 
 ---
@@ -80,7 +82,8 @@
 - 类型：JWT
 - 默认有效期：`1800s`，即 30 分钟
 - 主要用途：访问业务接口
-- 前端传输方式：放到 `Authorization: Bearer <token>` 请求头
+- 前端传输方式：由浏览器通过 `HttpOnly Cookie` 自动携带
+- 兼容方式：后端仍支持从 `Authorization: Bearer <token>` 请求头解析，但当前前端不再主动写入该请求头
 
 当前 token 中最关键的 claim：
 
@@ -110,10 +113,10 @@
 - 类型：高强度随机字符串，不是 JWT
 - 默认单次续签窗口：`604800s`，即 7 天
 - 主要用途：调用 `/api/auth/refresh` 换发新 token
-- 前端存储方式：cookie
-- 传输方式：只在 refresh 接口里作为请求体字段传给后端
+- 前端存储方式：`HttpOnly Cookie`
+- 传输方式：刷新接口优先从 Cookie 读取，兼容旧请求体字段
 
-示例：
+兼容旧请求体示例：
 
 ```json
 {
@@ -285,6 +288,36 @@ refresh token -> 属于哪次登录
 - 少 `session -> LoginSession`：无法统一管理完整登录状态
 - 少 `refreshHash -> session`：refresh 接口无法从 refresh token 反查会话
 
+## 4.5 登录失败防爆破 key
+
+代码位置：
+
+- `backend/backend-auth/src/main/java/com/example/auth/service/LoginAttemptService.java`
+
+登录失败锁定使用另外 2 类 Redis key：
+
+```text
+admin:login:fail:{username}:{ip}  -> 失败次数
+admin:login:lock:{username}:{ip}  -> 锁定标记
+```
+
+默认规则：
+
+- 同一用户名和 IP 维度累计失败
+- 15 分钟失败窗口内达到 5 次失败后写入锁定标记
+- 锁定默认持续 15 分钟
+- 登录成功后会清理失败计数和锁定标记
+
+相关配置在 `backend-auth`：
+
+```yaml
+security:
+  login-attempt:
+    max-failures: ${LOGIN_MAX_FAILURES:5}
+    lock-minutes: ${LOGIN_LOCK_MINUTES:15}
+    failure-window-minutes: ${LOGIN_FAILURE_WINDOW_MINUTES:15}
+```
+
 ---
 
 ## 5. 一次成功登录后的 Redis 状态长什么样
@@ -302,15 +335,16 @@ admin:login:session:s_abc         -> LoginSession{...}
 admin:login:refresh:h_xyz         -> s_abc
 ```
 
-同时浏览器中保存：
+同时浏览器中保存的是后端下发的 `HttpOnly Cookie`：
 
-- `accessToken`
-- `refreshToken`
+- `ADMIN_DEMO_ACCESS_TOKEN`
+- `ADMIN_DEMO_REFRESH_TOKEN`
 
 注意：
 
-- 浏览器保存的是原始 refresh token
+- Cookie 中保存的是原始 token，但因为带 `HttpOnly`，前端 JavaScript 不能读取 token 明文
 - Redis 保存的是 refresh token 的哈希
+- 前端本地只保存 `ADMIN_DEMO_SESSION_ACTIVE` 这种“会话存在”标记，用于维持原有路由和状态判断
 
 ---
 
@@ -326,11 +360,12 @@ admin:login:refresh:h_xyz         -> s_abc
 -> createSession
 -> 写入 3 类 Redis key
 -> 返回 accessToken + refreshToken
--> 前端保存 token
+-> AuthController 写入 HttpOnly Cookie，并清空响应体里的 token 字段
+-> 前端只记录 session-active 标记
 -> 前端再调 profile 拉取菜单和权限
 
 正常访问:
-前端带 Authorization
+浏览器自动携带 access token Cookie
 -> gateway 校验 token 和 session
 -> 下游 auth/system 再校验一次并恢复上下文
 -> 业务执行
@@ -342,7 +377,7 @@ admin:login:refresh:h_xyz         -> s_abc
 -> 校验 session 与 refresh 是否仍有效
 -> 轮换 refresh token
 -> accessTokenVersion + 1
--> 返回新双 token
+-> 写入新的 HttpOnly Cookie，并清空响应体里的 token 字段
 -> 前端重试原请求
 
 主动退出或被踢:
@@ -380,14 +415,18 @@ invalidateSession / invalidateUserSession
 
 `AuthServiceImpl.login()` 主要做这些事：
 
-1. 按用户名查询用户
-2. 判断用户是否存在
-3. 判断是否逻辑删除
-4. 判断账号是否禁用
-5. 校验密码
-6. 构建 `LoginUser`
-7. 调用 `loginSessionManager.createSession(loginUser)`
-8. 记录登录日志
+1. 获取登录 IP
+2. 调用 `LoginAttemptService.checkAllowed(username, ip)` 判断是否已被临时锁定
+3. 按用户名查询用户
+4. 判断用户是否存在
+5. 判断是否逻辑删除
+6. 判断账号是否禁用
+7. 校验密码
+8. 校验失败时记录失败次数，达到阈值后写入锁定标记
+9. 构建 `LoginUser`
+10. 调用 `loginSessionManager.createSession(loginUser)`
+11. 记录登录日志
+12. 登录成功后清理该用户名和 IP 的失败计数与锁定标记
 
 补充一点：
 
@@ -470,13 +509,15 @@ invalidateSession / invalidateUserSession
     - `admin:login:refresh:{refreshTokenHash}` -> `sessionId`
 16. 调用 `toAuthTokens(session, refreshToken)` 签发 access token
 17. `AuthServiceImpl.login()` 把 `AuthTokens` 转成 `LoginVO`
-18. 前端收到响应后写入 cookie 和 Vuex：
+18. `AuthController.login()` 将 access token 和 refresh token 写入 `HttpOnly Cookie`
+19. 响应体中的 `accessToken` 与 `refreshToken` 被清空，避免前端脚本读取令牌明文
+20. 前端只写入会话活跃标记和 Vuex 占位状态：
     - `setAuthTokens(...)`
     - `SET_TOKENS`
-19. 路由守卫检测到“已有 token 但未加载路由”，再调用：
+21. 路由守卫检测到“已有会话标记但未加载路由”，再调用：
     - `GET /api/auth/user/profile`
-20. auth/profile 接口根据当前 access token 恢复登录用户上下文，返回资料、权限、菜单
-21. 前端生成动态路由，第一次登录初始化完成
+22. auth/profile 接口根据 Cookie 中的 access token 恢复登录用户上下文，返回资料、权限、菜单
+23. 前端生成动态路由，第一次登录初始化完成
 
 这条链路的关键特征是：
 
@@ -540,7 +581,7 @@ admin:login:refresh:{newHash}     -> newSessionId
 8. 再次调用 `persistSession(session, newRefreshTokenHash)` 写入新的 3 类 Redis key
 9. 再调用 `toAuthTokens(...)` 签发新的 access token
 10. 返回新的 `LoginVO`
-11. 前端覆盖本地原有 token
+11. 后端覆盖浏览器中的认证 Cookie
 12. 后续 profile 拉取、动态路由恢复与第一次登录一致
 
 第二次登录和第一次登录相比，最关键的区别不是“后面多了什么”，而是：
@@ -610,15 +651,16 @@ invalidateUserSession(loginUser.getUserId());
 
 前端处理：
 
-1. 把 `accessToken` 写入 cookie
-2. 把 `refreshToken` 写入 cookie
-3. 同步写入 Vuex
+1. 后端已经通过 `Set-Cookie` 下发 `ADMIN_DEMO_ACCESS_TOKEN`
+2. 后端已经通过 `Set-Cookie` 下发 `ADMIN_DEMO_REFRESH_TOKEN`
+3. 前端调用 `setAuthTokens(...)` 时不再保存 token 明文，只写入 `ADMIN_DEMO_SESSION_ACTIVE`
+4. Vuex 中保留 `cookie-session` 占位值，用来兼容已有“是否登录”的状态判断
 
 但这时还没完成“完整进入系统”。
 
 原因是：
 
-- 现在只是拿到了双 token
+- 现在只是建立了 Cookie 会话
 - 前端还没拿到当前用户资料、角色、权限、菜单树
 
 ## 7.5 为什么登录后还要再调一次 profile
@@ -639,7 +681,7 @@ invalidateUserSession(loginUser.getUserId());
 所以登录后的前端初始化实际上分两步：
 
 1. `/api/auth/login`
-   - 获取双 token
+   - 建立 HttpOnly Cookie 会话
 2. `/api/auth/user/profile`
    - 获取资料、权限、菜单并生成路由
 
@@ -655,17 +697,16 @@ invalidateUserSession(loginUser.getUserId());
 
 请求拦截器会：
 
-1. 从 cookie 取出最新 `accessToken`
-2. 写入请求头：
-
-```http
-Authorization: Bearer <accessToken>
-```
+1. 设置 `withCredentials: true`
+2. 让浏览器自动携带同域或允许跨域凭据的认证 Cookie
+3. 不再从 JavaScript 可读存储中取 token
+4. 不再主动写入 `Authorization` 请求头
 
 注意：
 
-- access token 是主动写入请求头
-- 不是依赖浏览器自动附带 cookie 认证
+- 当前前端依赖浏览器自动附带 Cookie 认证
+- 这降低了 XSS 直接窃取 token 明文的风险
+- 后端仍保留 `Authorization` 解析能力，主要用于兼容旧客户端或调试请求
 
 ## 8.2 gateway 如何校验
 
@@ -675,8 +716,8 @@ Authorization: Bearer <accessToken>
 
 gateway 对非白名单请求会做这些检查：
 
-1. 解析 `Authorization`
-2. 提取 access token
+1. 优先解析 `Authorization`
+2. 如果请求头里没有 token，则从 `ADMIN_DEMO_ACCESS_TOKEN` Cookie 提取 access token
 3. 调用 `loginSessionManager.getValidSession(token)`
 4. 如果返回 `null`，直接返回 `401`
 5. 如果 session 有效，则把基础用户信息透传给下游
@@ -772,13 +813,14 @@ gateway 对非白名单请求会做这些检查：
 
 1. 当前请求不是 `/api/auth/refresh`
 2. 当前请求还没有重试过
-3. 当前本地还有 refresh token
+3. 当前前端仍有 `ADMIN_DEMO_SESSION_ACTIVE` 会话标记
 
 然后执行：
 
 1. `POST /api/auth/refresh`
-2. 成功则覆盖本地双 token
-3. 用新的 access token 重试原请求
+2. 浏览器自动携带 refresh token Cookie
+3. 成功后后端覆盖认证 Cookie
+4. 前端用新的 Cookie 会话重试原请求
 
 如果 refresh 失败，则：
 
@@ -795,7 +837,7 @@ gateway 对非白名单请求会做这些检查：
 
 执行顺序：
 
-1. 接收原始 refresh token
+1. `AuthController.refresh()` 优先从 `ADMIN_DEMO_REFRESH_TOKEN` Cookie 读取原始 refresh token，兼容旧请求体字段
 2. 做 SHA-256 哈希
 3. 用 `admin:login:refresh:{hash}` 找到 `sessionId`
 4. 用 `sessionId` 读取 `admin:login:session:{sessionId}`
@@ -814,7 +856,8 @@ gateway 对非白名单请求会做这些检查：
     - `lastRefreshAt`
 12. 重新写回 Redis
 13. 签发新的 access token
-14. 返回新的双 token
+14. 写入新的 `HttpOnly Cookie`
+15. 清空响应体里的 token 字段后返回
 
 ## 9.4 为什么 refresh 后旧 access token 会失效
 
@@ -884,6 +927,20 @@ gateway 对非白名单请求会做这些检查：
 - 就算用户一直活跃刷新
 - 整个 session 到绝对上限后也必须重新登录
 
+## 10.4 认证 Cookie 安全配置
+
+- 配置项：`security.cookie.secure`
+- 环境变量：`COOKIE_SECURE`
+- 当前默认：`false`
+
+Cookie 固定使用：
+
+- `HttpOnly`
+- `SameSite=Strict`
+- `Path=/`
+
+生产环境如果走 HTTPS，应该把 `COOKIE_SECURE=true` 打开，让浏览器只在 HTTPS 请求中携带认证 Cookie。
+
 ---
 
 ## 11. 登出与失效流程
@@ -897,11 +954,12 @@ gateway 对非白名单请求会做这些检查：
 
 处理逻辑：
 
-1. 从 `Authorization` 里解析 access token
+1. 优先从 `Authorization` 里解析 access token，缺失时从 `ADMIN_DEMO_ACCESS_TOKEN` Cookie 读取
 2. 从 token 中取出 `sid`
 3. 调用 `invalidateSession(sessionId)`
 4. 删除相关 Redis 状态
-5. 前端无论接口结果如何，最终都会清理本地 token
+5. `AuthController.logout()` 写入过期 Cookie，覆盖浏览器中的认证 Cookie
+6. 前端无论接口结果如何，最终都会清理本地 session-active 标记
 
 ## 11.2 `invalidateSession(sessionId)` 到底做了什么
 
@@ -999,11 +1057,12 @@ gateway 对非白名单请求会做这些检查：
 10. 未命中旧 session，仅做兜底清理
 11. `LoginSessionManager.persistSession()`
 12. `LoginSessionManager.toAuthTokens()`
-13. 前端保存 token
-14. `GET /api/auth/user/profile`
-15. 下游 `JwtAuthenticationFilter`
-16. `LoginSessionManager.getValidSession()`
-17. `LoginUserContext.set(...)`
+13. `AuthController.login()` 写入 HttpOnly Cookie，并清空响应体 token 字段
+14. 前端保存 session-active 标记
+15. `GET /api/auth/user/profile`
+16. 下游 `JwtAuthenticationFilter`
+17. `LoginSessionManager.getValidSession()`
+18. `LoginUserContext.set(...)`
 
 第二次登录经过的主链：
 
@@ -1024,11 +1083,12 @@ gateway 对非白名单请求会做这些检查：
 15. 返回 `createSession()`
 16. `LoginSessionManager.persistSession()`
 17. `LoginSessionManager.toAuthTokens()`
-18. 前端覆盖旧 token
-19. `GET /api/auth/user/profile`
-20. 下游 `JwtAuthenticationFilter`
-21. `LoginSessionManager.getValidSession()`
-22. `LoginUserContext.set(...)`
+18. 后端覆盖旧 Cookie
+19. 前端维持 session-active 标记
+20. `GET /api/auth/user/profile`
+21. 下游 `JwtAuthenticationFilter`
+22. `LoginSessionManager.getValidSession()`
+23. `LoginUserContext.set(...)`
 
 从这个并排视角看，第二次登录比第一次登录多出来的关键代码就是：
 
@@ -1039,8 +1099,9 @@ gateway 对非白名单请求会做这些检查：
 
 第二次登录成功的瞬间，旧端本地其实还保存着：
 
-- 旧 access token
-- 旧 refresh token
+- 旧 access token Cookie
+- 旧 refresh token Cookie
+- session-active 标记
 
 但服务端的 Redis 已经变成新状态了。
 
@@ -1114,11 +1175,12 @@ gateway 对非白名单请求会做这些检查：
 -> persistSession()
 -> Redis 写入 3 类 key
 -> toAuthTokens()
--> 返回新双 token
--> 前端写 cookie / Vuex
+-> AuthController 写入 HttpOnly Cookie
+-> 响应体 token 字段清空
+-> 前端写 session-active / Vuex
 -> GET /api/auth/user/profile
 -> JwtAuthenticationFilter
--> getValidSession(accessToken)
+-> getValidSession(cookieAccessToken)
 -> 恢复 LoginUserContext
 -> 返回 profile / menus / permissions
 ```
@@ -1149,8 +1211,8 @@ gateway 对非白名单请求会做这些检查：
 -> persistSession()
 -> Redis 写入新的 3 类 key
 -> toAuthTokens()
--> 返回新的双 token
--> 浏览器 B 覆盖本地 token
+-> AuthController 覆盖 HttpOnly Cookie
+-> 浏览器 B 维持 session-active 标记
 -> GET /api/auth/user/profile
 -> 正常进入系统
 ```
@@ -1164,14 +1226,14 @@ gateway 对非白名单请求会做这些检查：
 
 ```text
 浏览器 A
--> 带旧 access token 调业务接口
--> gateway 读取 Authorization
+-> 带旧 access token Cookie 调业务接口
+-> gateway 从 Cookie 读取 token
 -> getValidSession(oldAccessToken)
 -> 从旧 token 的 sid 找旧 session
 -> 发现旧 session 已不存在，或 user -> session 已不再指向它
 -> gateway 返回 401
 -> 前端收到 401，尝试 /api/auth/refresh
--> refreshSession(oldRefreshToken)
+-> refreshSession(oldRefreshTokenCookie)
 -> 用 oldRefreshHash 查 Redis
 -> 发现 old refresh 索引已被删除
 -> refresh 失败
@@ -1289,9 +1351,9 @@ refresh 主要看：
 | refresh 索引被删 | 业务请求可能仍成功 | `loginRefreshKey(hash)` 查不到 sessionId | refresh 失败，回登录页 | refresh token 已轮换，或 session 已失效 |
 | refresh token 过期，但 access token 还没过期 | 当前业务请求可能还能成功 | `refreshExpireAt <= now` | 一段时间后首个 401 无法恢复 | 常见于用户长期不操作后才再次访问 |
 | session 绝对过期，但 access token 还没过期 | 业务请求可能先因 session 不在线失败 | `sessionExpireAt <= now` | 401 后 refresh 也失败 | 表面看 token 没过期，实则 session 已被服务端淘汰 |
-| 用户被管理员禁用 | 当前已登录请求通常仍能通过 | refresh 通常也仍能成功 | 不会立即掉线 | 按当前实现，禁用影响未来登录，不主动回收现有 session |
+| 用户被管理员禁用 | `session -> LoginSession` 被删除或 `isSessionOnline()` 失败 | refresh 失败 | 回登录页 | `changeStatus(id)` 会调用 `invalidateUserSession(id)` |
 | 用户被删除 | 旧请求很快 401 | refresh 失败 | 回登录页 | `removeUser(id)` 会先 `invalidateUserSession(id)` |
-| 管理员重置了用户密码 | 当前已登录请求通常仍能通过 | refresh 通常也仍能成功 | 不会立即掉线 | 按当前实现，只改数据库密码，不回收现有 session |
+| 管理员重置了用户密码 | `session -> LoginSession` 被删除或 `isSessionOnline()` 失败 | refresh 失败 | 回登录页 | `resetPassword(id)` 会调用 `invalidateUserSession(id)` |
 | 当前用户主动修改密码 | 当前会话通常继续有效 | refresh 通常也仍能成功 | 不会立即掉线 | 只更新数据库密码，不回收当前 session |
 
 ## 14.5 并发与竞态说明
@@ -1452,7 +1514,36 @@ refresh 主要看：
 
 - 同账号再次登录
 - 管理员踢人下线
+- 管理员禁用用户
+- 管理员重置用户密码
+- 管理员调整用户角色
 - 删除用户前清理在线状态
+
+## 15.6 `AuthCookieService`
+
+你可以把它看成：
+
+“把令牌从前端可读存储迁移到 HttpOnly Cookie 的边界服务”
+
+它负责：
+
+- 登录和 refresh 成功后写入认证 Cookie
+- 登出时清理认证 Cookie
+- 从请求 Cookie 中读取 access token 和 refresh token
+- 清空 `LoginVO` 响应体里的 token 字段，避免前端脚本拿到令牌明文
+
+## 15.7 `LoginAttemptService`
+
+你可以把它看成：
+
+“登录入口的失败计数和临时锁定服务”
+
+它负责：
+
+- 登录前检查当前用户名和 IP 是否已锁定
+- 登录失败后累计失败次数
+- 达到阈值后写入锁定标记
+- 登录成功后清理失败计数和锁定标记
 
 ---
 
@@ -1462,8 +1553,8 @@ refresh 主要看：
 
 前端主要负责：
 
-- 登录后保存双 token
-- 业务请求带 access token
+- 登录后保存 session-active 标记，不保存 token 明文
+- 业务请求通过 `withCredentials` 让浏览器自动携带 Cookie
 - 收到 401 后尝试 refresh
 - refresh 成功后重试原请求
 - refresh 失败后清理本地会话并回登录页
@@ -1489,25 +1580,26 @@ gateway 主要负责：
 
 ## 16.4 用户操作对现有 session 的实际影响
 
-这一节很适合做安全评审，因为很多“用户管理动作”并不会自动影响当前在线 session。
+这一节很适合做安全评审。修复后，管理员侧会影响登录资格或权限边界的操作，已经显式回收目标用户当前会话。
 
 | 操作 | 入口代码 | 是否立即影响当前在线 session | 当前行为说明 |
 | --- | --- | --- | --- |
 | 当前用户修改自己的密码 | `AuthServiceImpl.updatePassword()` | 否 | 只更新数据库密码，不调用 `invalidateSession()` 或 `invalidateUserSession()` |
-| 管理员重置某用户密码 | `UserServiceImpl.resetPassword()` | 否 | 只更新数据库密码，不回收该用户现有 session |
-| 管理员禁用某用户 | `UserServiceImpl.changeStatus()` | 否 | 只改数据库中的 `status`，已登录 session 仍按旧快照继续运行 |
+| 管理员重置某用户密码 | `UserServiceImpl.resetPassword()` | 是 | 更新密码后调用 `invalidateUserSession(id)`，旧会话失效 |
+| 管理员禁用某用户 | `UserServiceImpl.changeStatus()` | 是 | 状态变化后调用 `invalidateUserSession(id)`，避免禁用账号继续访问 |
+| 管理员调整用户角色 | `UserServiceImpl.assignRoles()` | 是 | 角色变化后调用 `invalidateUserSession(id)`，避免旧权限快照继续使用 |
 | 管理员踢用户下线 | `UserServiceImpl.kickout()` | 是 | 调用 `invalidateUserSession(id)`，当前活跃 session 被回收 |
 | 管理员删除用户 | `UserServiceImpl.removeUser()` | 是 | 先 `invalidateUserSession(id)`，再标记删除 |
 
-这个表里最容易被误判的，是前 3 项：
+这个表里最容易被误判的是“当前用户主动修改自己的密码”：
 
-- 改密码不会自动让当前登录态失效
-- 重置密码不会自动让该用户所有已登录端下线
-- 禁用用户不会自动让该用户立刻掉线
+- 当前用户自己修改密码后，当前会话仍继续有效
+- 管理员重置密码、禁用用户、调整角色都会让目标用户现有会话失效
+- 被回收会话会在下一次请求或 refresh 时收到 401，然后回到登录页
 
-原因不是业务上一定应该这样，而是“当前代码确实就是这样实现的”。
+原因在于当前实现选择了“管理员侧敏感变更立即失效，用户自助改密不打断当前操作”的策略。
 
-### 16.4.1 为什么禁用用户后，已有会话通常还不会立刻失效
+### 16.4.1 为什么禁用、重置密码、调整角色后会话会失效
 
 登录时，`AuthServiceImpl.login()` 会校验数据库里的：
 
@@ -1515,7 +1607,7 @@ gateway 主要负责：
 
 只有启用状态才允许创建 session。
 
-但登录成功后，后续请求走的是：
+登录成功后，后续请求走的是：
 
 - `getValidSession(accessToken)`
 
@@ -1526,29 +1618,28 @@ gateway 主要负责：
 - session 是否仍在线
 - 版本号是否匹配
 
-它并不会在每次请求时重新回数据库检查用户当前状态。
+它并不会在每次请求时重新回数据库检查用户当前状态、密码或角色。
 
-所以按当前实现：
+因此修复后的做法是在这些管理动作发生时主动清理会话：
 
-- “禁用用户”主要影响未来登录
-- 不会自动回收已经存在的 session
+- `changeStatus(id)`：用户状态变化后清理会话
+- `resetPassword(id)`：密码重置后清理会话
+- `assignRoles(id, roleIds)`：角色变化后清理会话
 
-如果希望“禁用即掉线”，就需要在禁用动作里显式调用：
+清理动作统一调用：
 
 - `invalidateUserSession(id)`
 
-或者在每次请求时增加额外的数据库状态校验。
+这样不需要每次请求都回查数据库，也能让敏感变更在下一次请求时生效。
 
-### 16.4.2 为什么改密码或重置密码后，已有登录通常仍然有效
+### 16.4.2 为什么当前用户主动修改密码后，当前会话仍然有效
 
-无论是：
+当前用户 `updatePassword()` 会：
 
-- 当前用户 `updatePassword()`
-- 管理员 `resetPassword()`
+- 校验旧密码
+- 更新数据库里的密码哈希
 
-当前实现都只是更新数据库里的密码哈希。
-
-它们都没有：
+它不会：
 
 - 修改 `session.accessTokenVersion`
 - 删除 `refreshHash -> session`
@@ -1561,7 +1652,7 @@ gateway 主要负责：
 - 已经存在的 refresh token 仍按原 session 逻辑校验
 - 当前在线会话不会自动退出
 
-这也是文档里必须单独写出来的一个现状，因为很多人会默认“改密码等于全端下线”，但当前代码并不是这样。
+这属于产品策略选择。如果后续希望“用户自助改密后也立即重新登录”，可以在 `updatePassword()` 成功后调用 `loginSessionManager.invalidateUserSession(loginUser.getUserId())`。
 
 ---
 
@@ -1624,15 +1715,17 @@ gateway 主要负责：
 如果你准备自己继续顺代码，推荐这个顺序：
 
 1. `AuthServiceImpl.login()`
-2. `LoginSessionManager.createSession()`
-3. `LoginSessionManager.persistSession()`
-4. `JwtTokenProvider.createAccessToken()`
-5. `AuthTokenGlobalFilter.filter()`
-6. `LoginSessionManager.getValidSession()`
-7. `LoginSessionManager.refreshSession()`
-8. `LoginSessionManager.invalidateSession()`
-9. `LoginSessionManager.invalidateUserSession()`
-10. `UserServiceImpl.kickout()`
+2. `LoginAttemptService.checkAllowed()`
+3. `LoginSessionManager.createSession()`
+4. `LoginSessionManager.persistSession()`
+5. `JwtTokenProvider.createAccessToken()`
+6. `AuthCookieService.writeTokenCookies()`
+7. `AuthTokenGlobalFilter.filter()`
+8. `LoginSessionManager.getValidSession()`
+9. `LoginSessionManager.refreshSession()`
+10. `LoginSessionManager.invalidateSession()`
+11. `LoginSessionManager.invalidateUserSession()`
+12. `UserServiceImpl.kickout()`
 
 这样最容易把：
 
@@ -1652,7 +1745,7 @@ gateway 主要负责：
 
 - 登录页：`web-admin/src/views/login/index.vue`
 - 用户会话状态：`web-admin/src/store/modules/user.js`
-- token 存取：`web-admin/src/utils/auth.js`
+- 会话标记存取：`web-admin/src/utils/auth.js`
 - 请求拦截与自动 refresh：`web-admin/src/utils/request.js`
 - 路由守卫：`web-admin/src/main.js`
 - 用户管理踢下线入口：`web-admin/src/views/system/user/index.vue`
@@ -1661,13 +1754,15 @@ gateway 主要负责：
 
 - 登录、刷新、登出控制器：`backend/backend-auth/src/main/java/com/example/auth/controller/AuthController.java`
 - profile 控制器：`backend/backend-auth/src/main/java/com/example/auth/controller/ProfileController.java`
+- 认证 Cookie 服务：`backend/backend-auth/src/main/java/com/example/auth/service/AuthCookieService.java`
+- 登录失败防爆破服务：`backend/backend-auth/src/main/java/com/example/auth/service/LoginAttemptService.java`
 - auth 服务实现：`backend/backend-auth/src/main/java/com/example/auth/service/impl/AuthServiceImpl.java`
-- auth 服务 JWT 过滤器：`backend/backend-auth/src/main/java/com/example/auth/security/JwtAuthenticationFilter.java`
 
 后端 common：
 
 - session 核心：`backend/backend-common/src/main/java/com/example/common/security/LoginSessionManager.java`
 - JWT 签发与解析：`backend/backend-common/src/main/java/com/example/common/security/JwtTokenProvider.java`
+- auth/system 通用 JWT 过滤器：`backend/backend-common/src/main/java/com/example/common/security/JwtAuthenticationFilter.java`
 - session 模型：`backend/backend-common/src/main/java/com/example/common/model/security/LoginSession.java`
 - 登录用户快照：`backend/backend-common/src/main/java/com/example/common/model/security/LoginUser.java`
 - Redis key 常量：`backend/backend-common/src/main/java/com/example/common/constant/RedisKeyConstants.java`
@@ -1693,4 +1788,4 @@ gateway 主要负责：
 - 用 `refresh token` 证明“我现在要续签”
 - 用 `session` 证明“服务端仍然承认这是当前有效登录”
 
-单账号单活跃会话、自动 refresh、refresh rotation、旧 access token 立刻失效、管理员踢下线，全部都是围绕同一个 `sessionId` 在运转。
+单账号单活跃会话、自动 refresh、refresh rotation、旧 access token 立刻失效、管理员踢下线、敏感用户管理动作失效会话，全部都是围绕同一个 `sessionId` 在运转。前端只保存会话存在标记，真实令牌通过 `HttpOnly Cookie` 由浏览器和服务端协作传递。
